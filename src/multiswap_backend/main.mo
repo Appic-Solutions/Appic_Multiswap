@@ -7,7 +7,11 @@ actor TokenTransferCanister {
 
   // Types for handling different token standards
   type Nat = Nat64; // Adjust if needed based on your system's typical number range
-  type TransferReceipt = variant { Ok : Nat; Err : Text };
+  type TransferReceipt = {
+    #Ok : Nat;
+    #Err : Text;
+  };
+
   type TokenActorVariant = variant {
     DIPTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
     YCTokenActor : actor { transfer : (Principal, Nat) -> async Nat };

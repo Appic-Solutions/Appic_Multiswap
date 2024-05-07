@@ -1,47 +1,64 @@
-import Hash "mo:base/Hash";
-import Nat "mo:base/Nat";
-import Principal "mo:base/Principal";
-import HashMap "mo:base/HashMap";
+import TokenActor "mo:std/TokenActor";
+import Principal "mo:std/Principal";
+import Utils "mo:Utils";
+import Text "mo:std/text";
 
-actor TokenCanister {
-  // A hashmap to store each user's balance. The key is user's Principal ID, and the value is their token balance.
-  private var balances : HashMap.HashMap<Principal, Nat> = HashMap.HashMap<Principal, Nat>(10, Principal.hash, Nat.equal);
+actor TokenTransferCanister {
 
-  // A function to initialize or update a user's balance.
-  public func setBalance(newBalance : Nat) : async () {
-    let caller = Principal.fromActor(this);
-    balances.put(caller, newBalance);
+  // Types for handling different token standards
+  type Nat = Nat64; // Adjust if needed based on your system's typical number range
+  type TransferReceipt = variant { Ok : Nat; Err : Text };
+  type TokenActorVariant = variant {
+    DIPTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
+    YCTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
+    ICRC1TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
+    ICRC2TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
   };
 
-  // A function to retrieve the balance of the caller.
-  public func getBalance() : async Nat {
-    let caller = Principal.fromActor(this);
-    switch (balances.get(caller)) {
-      case (null) { return 0 };
-      case (?balance) { return balance };
-    };
+  // Definition for ICRC transfer argument
+  type ICRCTransferArg = {
+    from_subaccount : ?Blob;
+    to : { owner : Principal; subaccount : ?Blob };
+    amount : Nat;
   };
 
-  // A function to transfer tokens from the caller to another user.
-  public func transferTokens(recipient : Principal, amount : Nat) : async Bool {
-    let caller = Principal.fromActor(this);
-    let callerBalance = switch (balances.get(caller)) {
-      case (null) { 0 };
-      case (?balance) { balance };
-    };
-    if (callerBalance >= amount) {
-      // Subtract the amount from the caller's balance.
-      balances.put(caller, callerBalance - amount);
-
-      // Add the amount to the recipient's balance.
-      let recipientBalance = switch (balances.get(recipient)) {
-        case (null) { amount };
-        case (?balance) { balance + amount };
+  // Transfers tokens based on the token standard
+  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat) : async TransferReceipt {
+    switch (tokenCanister) {
+      case (#DIPTokenActor(dipTokenActor)) {
+        return await performDIPTransfer(dipTokenActor, caller, value);
       };
-      balances.put(recipient, recipientBalance);
-      return true;
-    } else {
-      return false; // Insufficient funds
+      case (#YCTokenActor(ycTokenActor)) {
+        return await performYCTransfer(ycTokenActor, caller, value);
+      };
+      case (#ICRC1TokenActor(icrc1TokenActor)) {
+        return await performICRCTransfer(icrc1TokenActor, caller, value);
+      };
+      case (#ICRC2TokenActor(icrc2TokenActor)) {
+        return await performICRCTransfer(icrc2TokenActor, caller, value);
+      };
     };
+  };
+
+  // Helper functions for transfer operations
+  private func performDIPTransfer(dipTokenActor : actor { transfer : (Principal, Nat) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
+    let txId = await dipTokenActor.transfer(caller, value);
+    return #Ok(txId);
+  };
+
+  private func performYCTransfer(ycTokenActor : actor { transfer : (Principal, Nat) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
+    let txId = await ycTokenActor.transfer(caller, value);
+    return #Ok(txId);
+  };
+
+  private func performICRCTransfer(icrcTokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
+    let defaultSubaccount : Blob = Utils.defaultSubAccount();
+    let transferArg : ICRCTransferArg = {
+      from_subaccount = ?defaultSubaccount;
+      to = { owner = caller; subaccount = ?defaultSubaccount };
+      amount = value;
+    };
+    let txId = await icrcTokenActor.icrc1_transfer(transferArg);
+    return #Ok(txId);
   };
 };

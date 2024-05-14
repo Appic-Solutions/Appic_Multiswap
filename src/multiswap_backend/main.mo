@@ -1,7 +1,7 @@
-import TokenActor "mo:std/TokenActor";
-import Principal "mo:std/Principal";
-import Utils "mo:Utils";
-import Text "mo:std/text";
+import Principal "mo:base/Principal";
+import Text "mo:base/Text";
+import HashMap "mo:base/HashMap";
+import Utils "./utils";
 
 actor TokenTransferCanister {
 
@@ -12,11 +12,10 @@ actor TokenTransferCanister {
     #Err : Text;
   };
 
-  type TokenActorVariant = variant {
-    DIPTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
-    YCTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
-    ICRC1TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
-    ICRC2TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
+  type TokenActorVariant = {
+    #DIPTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
+    #ICRC1TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
+    #ICRC2TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
   };
 
   // Definition for ICRC transfer argument
@@ -26,24 +25,19 @@ actor TokenTransferCanister {
     amount : Nat;
   };
 
-  type TransferReceipt = {
-    #Ok : Nat;
-    #Err : Text;
-  };
-
   type UserData = {
     totalDeposited : Nat;
     tokenDetails : HashMap.HashMap<Text, Nat>; // maps token ID to quantity
   };
-  private var userBalances : HashMap.HashMap<Principal, UserData> = HashMap.HashMap<Principal, UserData>();
+  private var userBalances : HashMap.HashMap<Principal, UserData> = HashMap.HashMap<Principal, UserData>(1, Principal.equal, Principal.hash);
 
   private func getUserData(user : Principal) : UserData {
     switch (userBalances.get(user)) {
       case (null) {
         // Initialize if no data exists for the user
-        let data = {
+        let data : UserData = {
           totalDeposited = 0;
-          tokenDetails = HashMap.HashMap<Text, Nat>();
+          tokenDetails = HashMap.HashMap<Text, Nat>(1, Text.equal, Text.hash);
         };
         userBalances.put(user, data);
         data;
@@ -55,13 +49,10 @@ actor TokenTransferCanister {
   };
 
   // Transfers tokens based on the token standard
-  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat) : async TransferReceipt {
+  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat, tokenID : Principal) : async TransferReceipt {
     switch (tokenCanister) {
       case (#DIPTokenActor(dipTokenActor)) {
         return await performDIPTransfer(dipTokenActor, caller, value);
-      };
-      case (#YCTokenActor(ycTokenActor)) {
-        return await performYCTransfer(ycTokenActor, caller, value);
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
         return await performICRCTransfer(icrc1TokenActor, caller, value);
@@ -70,25 +61,23 @@ actor TokenTransferCanister {
         return await performICRCTransfer(icrc2TokenActor, caller, value);
       };
     };
-    let userData = getUserData(caller);
-    let newTotal = userData.totalDeposited + value;
-    let newBalance = switch (userData.tokenDetails.get(tokenID)) {
+    var userData = getUserData(caller);
+    let newBalance = switch (userData.tokenDetails.get(Principal.toText(tokenID))) {
       case (null) { value };
       case (?current) { current + value };
     };
-    userData.tokenDetails.put(tokenID, newBalance);
-    userData.totalDeposited := newTotal;
-    userBalances.put(caller, userData);
+    if (userData.tokenDetails.get(Principal.toText(tokenID))) {
+      userData.tokenDetails.replace(Principal.toText(tokenID), newBalance);
+    } else {
+      userData.totalDeposited := userData.totalDeposited +1;
+      userData.tokenDetails.replace(Principal.toText(tokenID), newBalance);
+    };
+    userBalances.replace(caller, userData);
   };
 
   // Helper functions for transfer operations
   private func performDIPTransfer(dipTokenActor : actor { transfer : (Principal, Nat) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
     let txId = await dipTokenActor.transfer(caller, value);
-    return #Ok(txId);
-  };
-
-  private func performYCTransfer(ycTokenActor : actor { transfer : (Principal, Nat) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
-    let txId = await ycTokenActor.transfer(caller, value);
     return #Ok(txId);
   };
 

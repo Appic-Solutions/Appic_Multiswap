@@ -3,6 +3,7 @@ import Text "mo:base/Text";
 import HashMap "mo:base/HashMap";
 import Nat "mo:base/Nat";
 import Utils "./utils";
+import Array "mo:base/Array";
 
 actor TokenTransferCanister {
 
@@ -26,16 +27,16 @@ actor TokenTransferCanister {
   var userTokensLocked : HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>> = HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>>(1, Principal.equal, Principal.hash);
 
   // Transfers tokens based on the token standard
-  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat, tokenID : Principal) : async TransferReceipt {
+  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat, tokenID : Principal) : async () {
     switch (tokenCanister) {
       case (#DIPTokenActor(dipTokenActor)) {
-        return await performDIPTransfer(dipTokenActor, caller, value);
+        let _ = await performDIPTransfer(dipTokenActor, caller, value);
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
-        return await performICRCTransfer(icrc1TokenActor, caller, value);
+        let _ = await performICRCTransfer(icrc1TokenActor, caller, value);
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
-        return await performICRCTransfer(icrc2TokenActor, caller, value);
+        let _ = await performICRCTransfer(icrc2TokenActor, caller, value);
       };
     };
     var userData : HashMap.HashMap<Principal, Nat> = HashMap.HashMap<Principal, Nat>(1, Principal.equal, Principal.hash);
@@ -63,7 +64,6 @@ actor TokenTransferCanister {
       };
     };
     let _ = userTokensLocked.replace(caller, userData);
-    return #Ok(1);
   };
 
   // Helper functions for transfer operations

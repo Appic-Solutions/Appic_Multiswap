@@ -27,7 +27,7 @@ actor TokenTransferCanister {
 
   type UserData = {
     totalDeposited : Nat;
-    tokenDetails : HashMap.HashMap<Text, Nat>; // maps token ID to quantity
+    tokenDetails : HashMap.HashMap<Principal, Nat>; // maps token ID to quantity
   };
   private var userBalances : HashMap.HashMap<Principal, UserData> = HashMap.HashMap<Principal, UserData>(1, Principal.equal, Principal.hash);
 
@@ -37,7 +37,7 @@ actor TokenTransferCanister {
         // Initialize if no data exists for the user
         let data : UserData = {
           totalDeposited = 0;
-          tokenDetails = HashMap.HashMap<Text, Nat>(1, Text.equal, Text.hash);
+          tokenDetails = HashMap.HashMap<Principal, Nat>(1, Principal.equal, Principal.hash);
         };
         userBalances.put(user, data);
         data;
@@ -62,15 +62,15 @@ actor TokenTransferCanister {
       };
     };
     var userData = getUserData(caller);
-    let newBalance = switch (userData.tokenDetails.get(Principal.toText(tokenID))) {
+    let newBalance = switch (userData.tokenDetails.get(tokenID)) {
       case (null) { value };
       case (?current) { current + value };
     };
-    if (userData.tokenDetails.get(Principal.toText(tokenID))) {
-      userData.tokenDetails.replace(Principal.toText(tokenID), newBalance);
+    if (userData.tokenDetails.get(tokenID) == null) {
+      userData.tokenDetails.replace(tokenID, newBalance);
     } else {
       userData.totalDeposited := userData.totalDeposited +1;
-      userData.tokenDetails.replace(Principal.toText(tokenID), newBalance);
+      userData.tokenDetails.replace(tokenID, newBalance);
     };
     userBalances.replace(caller, userData);
   };

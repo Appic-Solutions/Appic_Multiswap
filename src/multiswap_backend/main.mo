@@ -143,9 +143,7 @@ actor Appic_Multiswap {
           case (#Err(e)) { return #Err(e) };
         };
       };
-      case (_) {
-        Prelude.unreachable();
-      };
+
     };
   };
 
@@ -185,9 +183,7 @@ actor Appic_Multiswap {
           case (#Err(e)) { return #Err(e) };
         };
       };
-      case (_) {
-        Prelude.unreachable();
-      };
+
     };
   };
 
@@ -201,7 +197,7 @@ actor Appic_Multiswap {
   public func transferTokensToCanister(tokenId : Text, tokenType : Text, caller : Principal, value : Nat, tokenID : Principal) : async TransferReceipt {
 
     // Retrieve user token data or initialize if null
-    let txid = switch (await _transferFrom(tokenId, tokenType, caller, value)) {
+    let _ = switch (await _transferFrom(tokenId, tokenType, caller, value)) {
       case (#Ok(id)) { id };
       case (#Err(e)) { return #Err("token transfer failed:") };
     };
@@ -257,7 +253,7 @@ actor Appic_Multiswap {
       case (?balance) { balance };
     };
 
-    let txId = switch (await _transfer(Principal.toText(tokenID), tokenType, caller, userBalance)) {
+    let _ = switch (await _transfer(Principal.toText(tokenID), tokenType, caller, userBalance)) {
       case (#Ok(id)) { id };
       case (#Err(e)) { return #Err(e) };
     };

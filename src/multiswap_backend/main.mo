@@ -3,47 +3,213 @@ import Text "mo:base/Text";
 import HashMap "mo:base/HashMap";
 import Nat "mo:base/Nat";
 import Utils "./utils";
-import Array "mo:base/Array";
+import Prelude "mo:base/Prelude";
+import Buffer "mo:base/Buffer";
 
-actor TokenTransferCanister {
+/**
+ * An actor responsible for transferring tokens between different token canisters.
+ */
+actor Appic_Multiswap {
 
+  /**
+   * Defines the structure of a transfer receipt.
+   */
   type TransferReceipt = {
-    #Ok : Nat;
-    #Err : Text;
+    #Ok : Nat; // Indicates a successful transfer with a transaction ID
+    #Err : Text; // Indicates an error occurred during the transfer
   };
 
-  type TokenActorVariant = {
-    #DIPTokenActor : actor { transfer : (Principal, Nat) -> async Nat };
-    #ICRC1TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
-    #ICRC2TokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat };
+  type TokenToNum = {
+    tokenId : Principal;
+    tokenNum : Nat;
   };
 
-  // Definition for ICRC transfer argument
+  public type TokenActor = actor {
+    allowance : shared (owner : Principal, spender : Principal) -> async Nat;
+    approve : shared (spender : Principal, value : Nat) -> async TransferReceipt;
+    balanceOf : (owner : Principal) -> async Nat;
+    decimals : () -> async Nat8;
+    name : () -> async Text;
+    symbol : () -> async Text;
+    totalSupply : () -> async Nat;
+    transfer : shared (to : Principal, value : Nat) -> async TransferReceipt;
+    transferFrom : shared (from : Principal, to : Principal, value : Nat) -> async TransferReceipt;
+  };
+
+  public type ICRC1TokenActor = actor {
+    icrc1_balance_of : (account : ICRCAccount) -> async Nat;
+    icrc1_decimals : () -> async Nat8;
+    icrc1_name : () -> async Text;
+    icrc1_symbol : () -> async Text;
+    icrc1_total_supply : () -> async Nat;
+    icrc1_transfer : shared (ICRCTransferArg) -> async TransferReceipt;
+  };
+  public type ICRC2TokenActor = actor {
+    icrc2_approve : shared (from_subaccount : ?Subaccount, spender : Principal, amount : Nat) -> async TransferReceipt;
+    icrc2_allowance : shared (account : Subaccount, spender : Principal) -> async (allowance : Nat, expires_at : ?Nat64);
+    icrc1_balance_of : (account : ICRCAccount) -> async Nat;
+    icrc1_decimals : () -> async Nat8;
+    icrc1_name : () -> async Text;
+    icrc1_symbol : () -> async Text;
+    icrc1_total_supply : () -> async Nat;
+    icrc2_transfer_from : shared (ICRC2TransferArg) -> async TransferReceipt;
+    icrc1_transfer : shared (ICRCTransferArg) -> async TransferReceipt;
+  };
+  type TokenActorVariable = {
+    #DIPtokenActor : TokenActor;
+    #ICRC1TokenActor : ICRC1TokenActor;
+    #ICRC2TokenActor : ICRC2TokenActor;
+  };
+
+  type Subaccount = Blob;
+  type ICRCAccount = {
+    owner : Principal;
+    subaccount : ?Subaccount;
+  };
   type ICRCTransferArg = {
-    from_subaccount : ?Blob;
-    to : { owner : Principal; subaccount : ?Blob };
+    from_subaccount : ?Subaccount;
+    to : ICRCAccount;
     amount : Nat;
   };
-  var userTokensLocked : HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>> = HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>>(1, Principal.equal, Principal.hash);
+  type ICRC2TransferArg = {
+    from : ICRCAccount;
+    to : ICRCAccount;
+    amount : Nat;
+  };
 
-  // Transfers tokens based on the token standard
-  public func transferTokens(tokenCanister : TokenActorVariant, caller : Principal, value : Nat, tokenID : Principal) : async () {
-    switch (tokenCanister) {
-      case (#DIPTokenActor(dipTokenActor)) {
-        let _ = await performDIPTransfer(dipTokenActor, caller, value);
+  var userTokensLocked : HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>> = HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>>(1, Principal.equal, Principal.hash);
+  private stable var txcounter : Nat = 0;
+
+  private func _getTokenActorWithType(tokenId : Text, tokenType : Text) : TokenActorVariable {
+    switch (tokenType) {
+      case ("DIP20") {
+        var tokenCanister : TokenActor = actor (tokenId);
+        return #DIPtokenActor(tokenCanister);
       };
-      case (#ICRC1TokenActor(icrc1TokenActor)) {
-        let _ = await performICRCTransfer(icrc1TokenActor, caller, value);
+      case ("ICRC1") {
+        var tokenCanister : ICRC1TokenActor = actor (tokenId);
+        return #ICRC1TokenActor(tokenCanister);
       };
-      case (#ICRC2TokenActor(icrc2TokenActor)) {
-        let _ = await performICRCTransfer(icrc2TokenActor, caller, value);
+      case ("ICRC2") {
+        var tokenCanister : ICRC2TokenActor = actor (tokenId);
+        return #ICRC2TokenActor(tokenCanister);
+      };
+      case (_) {
+        Prelude.unreachable();
       };
     };
+  };
+
+  private func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
+    var tokenCanister : TokenActorVariable = _getTokenActorWithType(tokenId, tokenType);
+    switch (tokenCanister) {
+      case (#DIPtokenActor(dipTokenActor)) {
+        var txid = await dipTokenActor.transferFrom(caller, Principal.fromActor(Appic_Multiswap), value);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (#ICRC1TokenActor(icrc1TokenActor)) {
+
+        let subaccount = Utils.defaultSubAccount();
+        var defaultSubaccount : Blob = Utils.defaultSubAccount();
+        var transferArg : ICRCTransferArg = {
+          from_subaccount = ?subaccount;
+          to = {
+            owner = Principal.fromActor(Appic_Multiswap);
+            subaccount = ?defaultSubaccount;
+          };
+          amount = value;
+        };
+        var txid = await icrc1TokenActor.icrc1_transfer(transferArg);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (#ICRC2TokenActor(icrc2TokenActor)) {
+        var transferArg = {
+          from = { owner = caller; subaccount = null };
+          to = {
+            owner = Principal.fromActor(Appic_Multiswap);
+            subaccount = null;
+          };
+          amount = value;
+        };
+        var txid = await icrc2TokenActor.icrc2_transfer_from(transferArg);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (_) {
+        Prelude.unreachable();
+      };
+    };
+  };
+
+  private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
+    var tokenCanister : TokenActorVariable = _getTokenActorWithType(tokenId, tokenType);
+    switch (tokenCanister) {
+      case (#DIPtokenActor(dipTokenActor)) {
+        var txid = await dipTokenActor.transfer(caller, value);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (#ICRC1TokenActor(icrc1TokenActor)) {
+        var defaultSubaccount : Blob = Utils.defaultSubAccount();
+        var transferArg : ICRCTransferArg = {
+          from_subaccount = ?defaultSubaccount;
+          to = { owner = caller; subaccount = ?defaultSubaccount };
+          amount = value;
+        };
+        var txid = await icrc1TokenActor.icrc1_transfer(transferArg);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (#ICRC2TokenActor(icrc2TokenActor)) {
+        var defaultSubaccount : Blob = Utils.defaultSubAccount();
+        var transferArg : ICRCTransferArg = {
+          from_subaccount = ?defaultSubaccount;
+          to = { owner = caller; subaccount = ?defaultSubaccount };
+          amount = value;
+        };
+        var txid = await icrc2TokenActor.icrc1_transfer(transferArg);
+        switch (txid) {
+          case (#Ok(id)) { return #Ok(id) };
+          case (#Err(e)) { return #Err(e) };
+        };
+      };
+      case (_) {
+        Prelude.unreachable();
+      };
+    };
+  };
+
+  /**
+   * Transfers tokens from the caller to a specified token canister.
+   * @param tokenCanister The target token canister.
+   * @param caller The caller initiating the transfer.
+   * @param value The amount of tokens to transfer.
+   * @param tokenID The ID of the token to transfer.
+   */
+  public func transferTokensToCanister(tokenId : Text, tokenType : Text, caller : Principal, value : Nat, tokenID : Principal) : async TransferReceipt {
+
+    // Retrieve user token data or initialize if null
+    let txid = switch (await _transferFrom(tokenId, tokenType, caller, value)) {
+      case (#Ok(id)) { id };
+      case (#Err(e)) { return #Err("token transfer failed:") };
+    };
+
     var userData : HashMap.HashMap<Principal, Nat> = HashMap.HashMap<Principal, Nat>(1, Principal.equal, Principal.hash);
     switch (userTokensLocked.get(caller)) {
       case (null) {
         // Handle the case where the value is null
-        // For example, you could initialize userData to a default value
         // userData := HashMap.HashMap<Principal, Nat>();
       };
       case (?value) {
@@ -51,6 +217,8 @@ actor TokenTransferCanister {
         userData := value;
       };
     };
+
+    // Update user balance with transferred tokens
     let newBalance = switch (userData.get(tokenID)) {
       case (null) { value };
       case (?current) { current + value };
@@ -63,24 +231,61 @@ actor TokenTransferCanister {
         let _ = userData.replace(tokenID, newBalance);
       };
     };
+
+    // Update user token data
     let _ = userTokensLocked.replace(caller, userData);
+    txcounter += 1;
+    return #Ok(txcounter -1);
   };
 
-  // Helper functions for transfer operations
-  private func performDIPTransfer(dipTokenActor : actor { transfer : (Principal, Nat) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
-    let txId = await dipTokenActor.transfer(caller, value);
-    return #Ok(txId);
-  };
-
-  private func performICRCTransfer(icrcTokenActor : actor { icrc1_transfer : (ICRCTransferArg) -> async Nat }, caller : Principal, value : Nat) : async TransferReceipt {
-    let defaultSubaccount : Blob = Utils.defaultSubAccount();
-    let transferArg : ICRCTransferArg = {
-      from_subaccount = ?defaultSubaccount;
-      to = { owner = caller; subaccount = ?defaultSubaccount };
-      amount = value;
+  public func withdrawTokens(tokenType : Text, caller : Principal, tokenID : Principal) : async TransferReceipt {
+    var userData : HashMap.HashMap<Principal, Nat> = switch (userTokensLocked.get(caller)) {
+      case (null) {
+        // Handle the case where the value is null
+        // For example, you could return an error indicating that the caller has no tokens locked
+        return #Err("No tokens locked for the caller");
+      };
+      case (?value) {
+        // Handle the case where the value is not null
+        value;
+      };
     };
-    let txId = await icrcTokenActor.icrc1_transfer(transferArg);
-    return #Ok(txId);
+    let userBalance = switch (userData.get(tokenID)) {
+      case (null) {
+        return #Err("No tokens of the specified ID locked for the caller");
+      };
+      case (?balance) { balance };
+    };
+
+    let txId = switch (await _transfer(Principal.toText(tokenID), tokenType, caller, userBalance)) {
+      case (#Ok(id)) { id };
+      case (#Err(e)) { return #Err(e) };
+    };
+
+    userData.put(tokenID, 0); // Set the user's token balance to zero after withdrawal
+    let _ = userTokensLocked.replace(caller, userData);
+    txcounter += 1;
+    return #Ok(txcounter -1);
+  };
+
+  public query func getAllUserTokens(caller : Principal) : async ([Principal], [Nat]) {
+    switch (userTokensLocked.get(caller)) {
+      case (null) {
+        // If no data found, return an empty hash map
+        return ([], []);
+      };
+
+      case (?userData) {
+        let tokensNum = userData.size();
+        var arrayTokens = Buffer.Buffer<Principal>(tokensNum);
+        var arrayNums = Buffer.Buffer<Nat>(tokensNum);
+        for ((key, value) in userData.entries()) {
+          arrayTokens.add(key);
+          arrayNums.add(value);
+        };
+        return (Buffer.toArray(arrayTokens), Buffer.toArray(arrayNums));
+      };
+    };
   };
 
 };

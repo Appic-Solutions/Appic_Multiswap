@@ -5,6 +5,8 @@ import Nat "mo:base/Nat";
 import Utils "./utils";
 import Prelude "mo:base/Prelude";
 import Buffer "mo:base/Buffer";
+import sonicTypes "sonicTypes";
+import Time "mo:base/Time";
 
 /**
  * An actor responsible for transferring tokens between different token canisters.
@@ -23,6 +25,9 @@ actor Appic_Multiswap {
     tokenId : Principal;
     tokenNum : Nat;
   };
+
+  type sonicActor = sonicTypes.sonicActor;
+  type TxReceipt = sonicTypes.TxReceipt;
 
   public type TokenActor = actor {
     allowance : shared (owner : Principal, spender : Principal) -> async Nat;
@@ -79,6 +84,8 @@ actor Appic_Multiswap {
 
   var userTokensLocked : HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>> = HashMap.HashMap<Principal, HashMap.HashMap<Principal, Nat>>(1, Principal.equal, Principal.hash);
   private stable var txcounter : Nat = 0;
+  let sonicCanisterId : Principal = Principal.fromText("3xwpq-ziaaa-aaaah-qcn4a-cai");
+  let sonicCanister : sonicActor = sonicTypes._getSonicActor(sonicCanisterId); // Sonic canister
 
   private func _getTokenActorWithType(tokenId : Text, tokenType : Text) : TokenActorVariable {
     switch (tokenType) {
@@ -187,6 +194,16 @@ actor Appic_Multiswap {
     };
   };
 
+  private func swapTokensWithSonic(
+    sellToken : Text,
+    buyToken : Text,
+    sonicCanister : sonicActor,
+    swapAmount : Nat,
+  ) : async TxReceipt {
+    let swapResult : TxReceipt = await sonicCanister.swapExactTokensForTokens(swapAmount, 0, [sellToken, buyToken], Principal.fromActor(Appic_Multiswap), Time.now() + 300000);
+    return swapResult;
+  };
+
   /**
    * Transfers tokens from the caller to a specified token canister.
    * @param tokenCanister The target token canister.
@@ -263,6 +280,8 @@ actor Appic_Multiswap {
     txcounter += 1;
     return #Ok(txcounter -1);
   };
+
+  public func Multiswap() {};
 
   public query func getAllUserTokens(caller : Principal) : async ([Principal], [Nat]) {
     switch (userTokensLocked.get(caller)) {

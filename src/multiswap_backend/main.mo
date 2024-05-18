@@ -84,6 +84,13 @@ actor Appic_Multiswap {
   let sonicCanisterId : Principal = Principal.fromText("3xwpq-ziaaa-aaaah-qcn4a-cai");
   let sonicCanister : sonicActor = sonicTypes._getSonicActor(sonicCanisterId); // Sonic canister
 
+  /**
+   * @notice Get the token actor with its type
+   * @dev This function returns the token actor variable based on the token type
+   * @param tokenId The ID of the token
+   * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
+   * @return The token actor variable
+   */
   private query func _getTokenActorWithType(tokenId : Text, tokenType : Text) : async TokenActorVariable {
     switch (tokenType) {
       case ("DIP20") {
@@ -104,6 +111,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @notice Transfer tokens from a caller to this actor
+   * @dev This function handles transferring tokens from the caller to this actor based on token type
+   * @param tokenId The ID of the token
+   * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
+   * @param caller The principal of the caller
+   * @param value The amount of tokens to transfer
+   * @return Transfer receipt indicating success or error
+   */
   private func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
     var tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
     switch (tokenCanister) {
@@ -151,6 +167,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @notice Transfer tokens to a caller
+   * @dev This function handles transferring tokens to the caller based on token type
+   * @param tokenId The ID of the token
+   * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
+   * @param caller The principal of the caller
+   * @param value The amount of tokens to transfer
+   * @return Transfer receipt indicating success or error
+   */
   private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
     var tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
     switch (tokenCanister) {
@@ -191,6 +216,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+ * @notice Swaps tokens using Sonic canister
+ * @dev This function swaps an exact amount of `sellToken` for `buyToken` using the Sonic canister.
+ * @param sellToken The token to sell
+ * @param buyToken The token to buy
+ * @param to The recipient principal of the bought tokens
+ * @param swapAmount The amount of `sellToken` to swap
+ * @return The transaction receipt indicating success or error
+ */
   private func swapTokensWithSonic(
     sellToken : Text,
     buyToken : Text,
@@ -201,6 +235,15 @@ actor Appic_Multiswap {
     return swapResult;
   };
 
+  /**
+ * @notice Transfers tokens to this canister
+ * @dev This function transfers tokens from the caller to this canister and updates the user's locked token data.
+ * @param tokenId The ID of the token
+ * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
+ * @param caller The principal of the caller
+ * @param value The amount of tokens to transfer
+ * @return Transfer receipt indicating success or error
+ */
   private func transferTokensToCanister(tokenId : Principal, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
 
     // Retrieve user token data or initialize if null
@@ -241,6 +284,14 @@ actor Appic_Multiswap {
     return #Ok(txcounter -1);
   };
 
+  /**
+ * @notice Withdraws tokens to the caller
+ * @dev This function allows the caller to withdraw their locked tokens.
+ * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
+ * @param caller The principal of the caller
+ * @param tokenID The ID of the token to withdraw
+ * @return Transfer receipt indicating success or error
+ */
   public func withdrawTokens(tokenType : Text, caller : Principal, tokenID : Principal) : async TransferReceipt {
     var userData : HashMap.HashMap<Principal, Nat> = switch (userTokensLocked.get(caller)) {
       case (null) {
@@ -271,6 +322,19 @@ actor Appic_Multiswap {
     return #Ok(txcounter -1);
   };
 
+  /**
+ * @notice Performs a multi-token swap
+ * @dev This function handles swapping multiple types of tokens through an intermediate token.
+ * @param sellingTokens Array of token IDs to sell
+ * @param buyingTokens Array of token IDs to buy
+ * @param sellAmounts Array of amounts of each token to sell
+ * @param buyAmounts Array of amounts of each token to buy
+ * @param midToken The intermediate token used for swapping
+ * @param midTokenType The type of the intermediate token (e.g., "DIP20", "ICRC1", "ICRC2")
+ * @param sellingTokensType Array of types of tokens to sell
+ * @param buyingTokensType Array of types of tokens to buy
+ * @param caller The principal of the caller
+ */
   public func Multiswap(sellingTokens : [Principal], buyingTokens : [Principal], sellAmounts : [Nat], buyAmounts : [Nat], midToken : Principal, midTokenType : Text, sellingTokensType : [Text], buyingTokensType : [Text], caller : Principal) {
     assert (sellingTokens.size() == sellAmounts.size());
     assert (buyingTokens.size() == buyAmounts.size());
@@ -381,6 +445,12 @@ actor Appic_Multiswap {
 
   };
 
+  /**
+ * @notice Retrieves all user tokens and their amounts
+ * @dev This function fetches all locked tokens for a specific user.
+ * @param caller The principal of the user
+ * @return A tuple containing an array of token IDs and their corresponding amounts
+ */
   public query func getAllUserTokens(caller : Principal) : async ([Principal], [Nat]) {
     switch (userTokensLocked.get(caller)) {
       case (null) {

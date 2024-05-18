@@ -9,14 +9,8 @@ import sonicTypes "sonicTypes";
 import Time "mo:base/Time";
 import Iter "mo:base/Iter";
 
-/**
- * An actor responsible for transferring tokens between different token canisters.
- */
 actor Appic_Multiswap {
 
-  /**
-   * Defines the structure of a transfer receipt.
-   */
   type TransferReceipt = {
     #Ok : Nat; // Indicates a successful transfer with a transaction ID
     #Err : Text; // Indicates an error occurred during the transfer
@@ -207,13 +201,6 @@ actor Appic_Multiswap {
     return swapResult;
   };
 
-  /**
-   * Transfers tokens from the caller to a specified token canister.
-   * @param tokenCanister The target token canister.
-   * @param caller The caller initiating the transfer.
-   * @param value The amount of tokens to transfer.
-   * @param tokenID The ID of the token to transfer.
-   */
   private func transferTokensToCanister(tokenId : Principal, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
 
     // Retrieve user token data or initialize if null

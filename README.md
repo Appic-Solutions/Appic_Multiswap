@@ -2,38 +2,48 @@
 
 ![technical Architechture of multiswap](Multiswap.png)
 
-## Token Actor and Canister Definitions
+# Overview of the Code Structure
 
-- The actor defines different types of token actors such as `TokenActor`, `ICRC1TokenActor`, and `ICRC2TokenActor, each with specific methods for interacting with token canisters.
+The code provided is an actor named `Appic_Multiswap`, which contains various functions to facilitate the transfer and swapping of tokens. The actor includes multiple types of token actors such as `TokenActor`, `ICRC1TokenActor`, and `ICRC2TokenActor`, each with its set of functions for token-related operations. Additionally, the actor interacts with a Sonic canister for token swaps and deposits. Here's a detailed breakdown of the provided code:
 
-## Transfer Receipt Structure
+## Type Definitions and Variables
 
-- The `TransferReceipt` type outlines the structure indicating a successful transfer with a transaction ID or an error message.
+The actor includes several type definitions such as `TransferReceipt`, `TokenToNum`, `sonicActor`, `TxReceipt`, `Subaccount`, `ICRCAccount`, `ICRCTransferArg`, `ICRC2TransferArg`, and `TokenActorVariable`, along with the definition of variables like `userTokensLocked` and `txcounter`.
 
-## Private Data and Counter
+## Function Declarations
 
-- The actor maintains private data structures for user token locks and a stable `txcounter` variable to track the number of transactions.
+1. `private func _getTokenActorWithType(tokenId : Text, tokenType : Text) : async TokenActorVariable`
 
-### **\_getTokenActorWithType Function**
+- This function retrieves the specific token actor based on the provided `tokenId` and `tokenType`.
 
-- This private function retrieves the appropriate token actor based on the provided token ID and type.
+2. `private func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt`
 
-### **\_transferFrom Function**
+- Transfers tokens from a specific token actor based on the `tokenId` and `tokenType` provided.
 
-- This function handles the transfer of tokens from the caller to the target canister. It supports different token canister types like DIP20, ICRC1, and ICRC2.
+3. `private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt`
 
-### **\_transfer Function**
+- Transfers tokens using a specific token actor based on the `tokenId` and `tokenType` provided.
 
-- Facilitates the token transfer between the caller and a specified token canister, handling different token types appropriately.
+4. `private func swapTokensWithSonic(sellToken : Text, buyToken : Text, to : Principal, swapAmount : Nat) : async TxReceipt`
 
-### **transferTokensToCanister Function**
+- Initiates token swaps using the Sonic canister based on the specified tokens and amounts.
 
-- Enables transferring tokens from the caller to a target token canister. It updates the user's token data and balance upon successful transfer.
+5. `private func transferTokensToCanister(tokenId : Principal, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt`
 
-### **withdrawTokens Function**
+- Transfers tokens to the designated canister based on the provided `tokenId` and `tokenType`.
 
-- Allows the caller to withdraw tokens of a specific type. It handles updating user data, transferring tokens, and setting the token balance to zero after withdrawal.
+6. `public func withdrawTokens(tokenType : Text, caller : Principal, tokenID : Principal) : async TransferReceipt`
 
-### **getAllUserTokens Query**
+- Allows the withdrawal of tokens based on the specified `tokenType`, `caller`, and `tokenID`.
 
-- This function retrieves all tokens locked by a specific user and returns the list of token IDs along with their respective amounts.
+7. `public func Multiswap(sellingTokens : [Principal], buyingTokens : [Principal], sellAmounts : [Nat], buyAmounts : [Nat], midToken : Principal, midTokenType : Text, sellingTokensType : [Text], buyingTokensType : [Text], caller : Principal)`
+
+- Facilitates the multi-token swap process considering multiple parameters for selling and buying tokens, along with the intermediary token and the caller's details.
+
+8. `public query func getAllUserTokens(caller : Principal) : async ([Principal], [Nat])`
+
+- Retrieves all the tokens held by a specific "caller" along with their respective balances.
+
+## Conclusion
+
+The provided code presents a robust implementation for token transfers, swaps, and related operations, catering to different token types and scenarios. Each function is efficiently designed to handle specific token-related tasks and interactions with the Sonic canister.

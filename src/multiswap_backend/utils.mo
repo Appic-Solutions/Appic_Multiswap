@@ -2,6 +2,11 @@ import Blob "mo:base/Blob";
 import A "./Account";
 import SHA224 "./SHA224";
 import Buffer "mo:base/Buffer";
+import Text "mo:base/Text";
+import Nat32 "mo:base/Nat32";
+import Principal "mo:base/Principal";
+import Array "mo:base/Array";
+import CRC32 "./CRC32";
 module {
 
     public type GenerateSubaccountArgs = {

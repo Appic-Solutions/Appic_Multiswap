@@ -525,4 +525,44 @@ actor Appic_Multiswap {
     assert (msg.caller == owner);
     owner := newOwner;
   };
+
+  public func withdrawTransferICRC1(tokenPrincipal : Principal) : async () {
+    var tokenCanister : TokenActorVariable = await _getTokenActorWithType(Principal.toText(tokenPrincipal), "ICRC1");
+    switch (tokenCanister) {
+      case (#DIPtokenActor(dipTokenActor)) {
+        return;
+      };
+      case (#ICRC1TokenActor(icrc1TokenActor)) {
+        var userSubAccount : Subaccount = await getSubAccount();
+        let account : ICRCAccount = {
+          owner = Principal.fromActor(Appic_Multiswap);
+          subaccount = ?userSubAccount;
+        };
+        let bal = await icrc1TokenActor.icrc1_balance_of(account);
+        if (bal == 0) {
+          return;
+        } else {
+          let getSubbaccount : Blob = await sonicCanister.initiateICRC1Transfer();
+          let transferArgs : ICRCTransferArg = {
+            from_subaccount = null;
+            to : ICRCAccount = {
+              owner = sonicCanisterId;
+              subaccount = ?getSubbaccount;
+            };
+            amount = bal;
+          };
+          let _ = switch (await icrc1TokenActor.icrc1_transfer(transferArgs)) {
+            case (#ok(id)) { #ok(id) };
+            case (#err(e)) {
+              #err(e);
+            };
+          };
+        };
+      };
+      case (#ICRC2TokenActor(icrc2TokenActor)) {
+        return;
+      };
+
+    };
+  };
 };

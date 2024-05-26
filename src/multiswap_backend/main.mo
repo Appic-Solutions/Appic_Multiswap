@@ -542,7 +542,7 @@ actor Appic_Multiswap {
         if (bal == 0) {
           return;
         } else {
-          let getSubbaccount : Blob = await sonicCanister.initiateICRC1Transfer();
+          let getSubbaccount : Blob = Utils.defaultSubAccount();
           let transferArgs : ICRCTransferArg = {
             from_subaccount = null;
             to : ICRCAccount = {

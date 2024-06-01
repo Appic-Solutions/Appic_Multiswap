@@ -1,10 +1,8 @@
 import Principal "mo:base/Principal";
 import Text "mo:base/Text";
-import HashMap "mo:base/HashMap";
 import Nat "mo:base/Nat";
 import Utils "./utils";
 import Prelude "mo:base/Prelude";
-import Buffer "mo:base/Buffer";
 import sonicTypes "sonicTypes";
 import Time "mo:base/Time";
 import Iter "mo:base/Iter";
@@ -553,7 +551,16 @@ actor Appic_Multiswap {
           #err(e);
         };
       };
-      let _ = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], sellAmounts[i]);
+      // Call sonicSwapAmountOut
+      let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i]);
+      // Call icpSwapAmountOut
+      let icpAmountOut : Nat = await icpSwapAmountOut(sellingTokens[i], sellingTokensType[i], midToken, midTokenType, sellAmounts[i]);
+      // Compare the results and return the better option
+      if (sonicAmountOut > icpAmountOut) {
+        let _ = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], sellAmounts[i]);
+      } else {
+        let _ = await swapWithICPSwap(sellingTokens[i], midToken, sellingTokensType[i], midTokenType, sellAmounts[i]);
+      };
     };
 
     var midTokenBalFin = 0;
@@ -590,12 +597,28 @@ actor Appic_Multiswap {
 
     for (i in Iter.range(0, buyingTokens.size() -1)) {
       let buyActulAmt = buyAmounts[i] * midTokenBal / 100;
-      let amountOfBoughtTokenN : Nat = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyActulAmt);
-      let _ = switch (await withdrawTokens(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
-        case (#ok(id)) { #ok(id) };
-        case (#err(e)) {
-          assert (false);
-          #err(e);
+      // Call sonicSwapAmountOut
+      let sonicAmountOut : Nat = await sonicSwapAmountOut(midToken, buyingTokens[i], buyActulAmt);
+      // Call icpSwapAmountOut
+      let icpAmountOut : Nat = await icpSwapAmountOut(midToken, midTokenType, buyingTokens[i], buyingTokensType[i], buyActulAmt);
+      // Compare the results and return the better option
+      if (sonicAmountOut > icpAmountOut) {
+        let amountOfBoughtTokenN = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyActulAmt);
+        let _ = switch (await withdrawTokens(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
+          case (#ok(id)) { #ok(id) };
+          case (#err(e)) {
+            assert (false);
+            #err(e);
+          };
+        };
+      } else {
+        let amountOfBoughtTokenN = await swapWithICPSwap(midToken, buyingTokens[i], midTokenType, buyingTokensType[i], buyActulAmt);
+        let _ = switch (await withdrawTokens(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
+          case (#ok(id)) { #ok(id) };
+          case (#err(e)) {
+            assert (false);
+            #err(e);
+          };
         };
       };
     };

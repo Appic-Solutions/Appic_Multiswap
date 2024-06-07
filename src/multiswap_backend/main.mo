@@ -143,7 +143,7 @@ actor Appic_Multiswap {
    * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
    * @return The token actor variable
    */
-  private query func _getTokenActorWithType(tokenId : Text, tokenType : Text) : async TokenActorVariable {
+  public query func _getTokenActorWithType(tokenId : Text, tokenType : Text) : async TokenActorVariable {
     switch (tokenType) {
       case ("DIP20") {
         var tokenCanister : TokenActor = actor (tokenId);

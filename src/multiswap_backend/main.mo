@@ -12,9 +12,22 @@ import Nat8 "mo:base/Nat8";
 import Bool "mo:base/Bool";
 
 actor Appic_Multiswap {
+  type ERR = {
+    #BadFee : { expected_fee : Nat };
+    #InsufficientFunds : { balance : Nat };
+    #AllowanceChanged : { current_allowance : Nat };
+    #Expired : { ledger_time : Nat64 };
+    #TooOld;
+    #CreatedInFuture : { ledger_time : Nat64 };
+    #Duplicate : { duplicate_of : Nat };
+    #TemporarilyUnavailable;
+    #GenericError : { error_code : Nat; message : Text };
+    #BadBurn : { min_burn_amount : Nat };
+    #InsufficientAllowance : { allowance : Nat };
+  };
   type TransferReceipt = {
-    #ok : Nat; // Indicates a successful transfer with a transaction ID
-    #err : Text; // Indicates an error occurred during the transfer
+    #Ok : Nat; // Indicates a successful transfer with a transaction ID
+    #Err : ERR; // Indicates an error occurred during the transfer
   };
   type sonicActor = sonicTypes.sonicActor;
   type TxReceipt = sonicTypes.TxReceipt;
@@ -62,17 +75,12 @@ actor Appic_Multiswap {
     #UnsupportedToken : Text;
     #InsufficientFunds;
   };
-  type Result_2 = {
-    #ok : [PoolData];
-    #err : Error;
-  };
   type Result_3 = {
     #ok : PoolData;
     #err : Error;
   };
   type SwapFactory = actor {
     getPool : (GetPoolArgs) -> async Result_3;
-    getPools : () -> async Result_2;
   };
   type SwapArgs = {
     amountIn : Text;
@@ -130,7 +138,6 @@ actor Appic_Multiswap {
     icrc1_transfer : shared (ICRCTransferArg) -> async TransferReceipt;
   };
 
-  private stable var txcounter : Nat = 0;
   let sonicCanisterId : Principal = Principal.fromText("3xwpq-ziaaa-aaaah-qcn4a-cai");
   let sonicCanister : sonicActor = sonicTypes._getSonicActor(sonicCanisterId); // Sonic canister
   let swapFactoryCanister = actor ("4mmnk-kiaaa-aaaag-qbllq-cai") : SwapFactory;
@@ -173,20 +180,17 @@ actor Appic_Multiswap {
    * @param value The amount of tokens to transfer
    * @return Transfer receipt indicating success or error
    */
-  private func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
-    var tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
+  public func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
+    let tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
     switch (tokenCanister) {
       case (#DIPtokenActor(dipTokenActor)) {
-        var txid = await dipTokenActor.transferFrom(caller, Principal.fromActor(Appic_Multiswap), value);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await dipTokenActor.transferFrom(caller, Principal.fromActor(Appic_Multiswap), value);
+        return txid;
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
-        var defaultSubaccount : Blob = Utils.defaultSubAccount();
-        var userSubAccount : Subaccount = await getICRC1SubAccount(caller);
-        var transferArg : ICRCTransferArg = {
+        let defaultSubaccount : Subaccount = Utils.defaultSubAccount();
+        let userSubAccount : Subaccount = await getICRC1SubAccount(caller);
+        let transferArg : ICRCTransferArg = {
           from_subaccount = ?userSubAccount;
           to = {
             owner = Principal.fromActor(Appic_Multiswap);
@@ -194,26 +198,21 @@ actor Appic_Multiswap {
           };
           amount = value;
         };
-        var txid = await icrc1TokenActor.icrc1_transfer(transferArg);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await icrc1TokenActor.icrc1_transfer(transferArg);
+        return txid;
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
-        var transferArg = {
-          from = { owner = caller; subaccount = null };
+        let defaultSubaccount : Subaccount = Utils.defaultSubAccount();
+        let transferArg : ICRC2TransferArg = {
+          from = { owner = caller; subaccount = ?defaultSubaccount };
           to = {
             owner = Principal.fromActor(Appic_Multiswap);
-            subaccount = null;
+            subaccount = ?defaultSubaccount;
           };
           amount = value;
         };
-        var txid = await icrc2TokenActor.icrc2_transfer_from(transferArg);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await icrc2TokenActor.icrc2_transfer_from(transferArg);
+        return txid;
       };
 
     };
@@ -229,96 +228,34 @@ actor Appic_Multiswap {
    * @return Transfer receipt indicating success or error
    */
   private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
-    var tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
+    let tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
     switch (tokenCanister) {
       case (#DIPtokenActor(dipTokenActor)) {
-        var txid = await dipTokenActor.transfer(caller, value);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await dipTokenActor.transfer(caller, value);
+        return txid;
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
-        var defaultSubaccount : Blob = Utils.defaultSubAccount();
-        var transferArg : ICRCTransferArg = {
+        let defaultSubaccount : Subaccount = Utils.defaultSubAccount();
+        let transferArg : ICRCTransferArg = {
           from_subaccount = ?defaultSubaccount;
           to = { owner = caller; subaccount = ?defaultSubaccount };
           amount = value;
         };
-        var txid = await icrc1TokenActor.icrc1_transfer(transferArg);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await icrc1TokenActor.icrc1_transfer(transferArg);
+        return txid;
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
-        var defaultSubaccount : Blob = Utils.defaultSubAccount();
-        var transferArg : ICRCTransferArg = {
+        let defaultSubaccount : Blob = Utils.defaultSubAccount();
+        let transferArg : ICRCTransferArg = {
           from_subaccount = ?defaultSubaccount;
           to = { owner = caller; subaccount = ?defaultSubaccount };
           amount = value;
         };
-        var txid = await icrc2TokenActor.icrc1_transfer(transferArg);
-        switch (txid) {
-          case (#ok(id)) { return #ok(id) };
-          case (#err(e)) { return #err(e) };
-        };
+        let txid : TransferReceipt = await icrc2TokenActor.icrc1_transfer(transferArg);
+        return txid;
       };
 
     };
-  };
-
-  /**
- * @notice Swaps tokens using Sonic canister
- * @dev This function swaps an exact amount of `sellToken` for `buyToken` using the Sonic canister.
- * @param sellToken The token to sell
- * @param buyToken The token to buy
- * @param to The recipient principal of the bought tokens
- * @param swapAmount The amount of `sellToken` to swap
- * @return The transaction receipt indicating success or error
- */
-  private func swapTokensWithSonic(
-    sellToken : Text,
-    buyToken : Text,
-    to : Principal,
-    swapAmount : Nat,
-  ) : async TxReceipt {
-    let swapResult : TxReceipt = await sonicCanister.swapExactTokensForTokens(swapAmount, 0, [sellToken, buyToken], to, Time.now() + 300000);
-    return swapResult;
-  };
-
-  /**
- * @notice Transfers tokens to this canister
- * @dev This function transfers tokens from the caller to this canister and updates the user's locked token data.
- * @param tokenId The ID of the token
- * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
- * @param caller The principal of the caller
- * @param value The amount of tokens to transfer
- * @return Transfer receipt indicating success or error
- */
-  private func transferTokensToCanister(tokenId : Principal, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
-    // Retrieve user token data or initialize if null
-    let _ = switch (await _transferFrom(Principal.toText(tokenId), tokenType, caller, value)) {
-      case (#ok(id)) { return #ok(id) };
-      case (#err(e)) { return #err("token transfer failed") };
-    };
-  };
-
-  /**
- * @notice Withdraws tokens to the caller
- * @dev This function allows the caller to withdraw their locked tokens.
- * @param tokenType The type of the token (e.g., "DIP20", "ICRC1", "ICRC2")
- * @param caller The principal of the caller
- * @param tokenID The ID of the token to withdraw
- * @return Transfer receipt indicating success or error
- */
-  public func withdrawTokens(tokenType : Text, caller : Principal, tokenID : Principal, userBalance : Nat) : async TransferReceipt {
-    let _ = switch (await _transfer(Principal.toText(tokenID), tokenType, caller, userBalance)) {
-      case (#ok(id)) { return #ok(id) };
-      case (#err(e)) { return #err("Withdraw token failed") };
-    };
-    txcounter += 1;
-    return #ok(txcounter -1);
   };
 
   /// @notice Swaps tokens using the SonicSwap platform
@@ -338,13 +275,7 @@ actor Appic_Multiswap {
     switch (tokenActor) {
       case (#DIPtokenActor(dipTokenActor)) {
         // Approve SonicSwap to transfer tokens on behalf of the user
-        let _ = switch (await dipTokenActor.approve(sonicCanisterId, sellAmt)) {
-          case (#ok(id)) { #ok(id) };
-          case (#err(e)) {
-            assert (false);
-            #err(e);
-          };
-        };
+        let _ = await dipTokenActor.approve(sonicCanisterId, sellAmt);
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
         // Transfer ICRC1 tokens to SonicSwap
@@ -357,23 +288,11 @@ actor Appic_Multiswap {
           };
           amount = sellAmt;
         };
-        let _ = switch (await icrc1TokenActor.icrc1_transfer(transferArgs)) {
-          case (#ok(id)) { #ok(id) };
-          case (#err(e)) {
-            assert (false);
-            #err(e);
-          };
-        };
+        let _ = await icrc1TokenActor.icrc1_transfer(transferArgs);
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
         // Approve SonicSwap to transfer tokens on behalf of the user
-        let _ = switch (await icrc2TokenActor.icrc2_approve(null, sonicCanisterId, sellAmt)) {
-          case (#ok(id)) { #ok(id) };
-          case (#err(e)) {
-            assert (false);
-            #err(e);
-          };
-        };
+        let _ = await icrc2TokenActor.icrc2_approve(null, sonicCanisterId, sellAmt);
       };
     };
 
@@ -387,7 +306,7 @@ actor Appic_Multiswap {
     };
 
     // Perform the token swap with SonicSwap
-    let _ = switch (await swapTokensWithSonic(Principal.toText(sellToken), Principal.toText(buyToken), Principal.fromActor(Appic_Multiswap), sellAmt)) {
+    let _ = switch (await sonicCanister.swapExactTokensForTokens(sellAmt, 0, [Principal.toText(sellToken), Principal.toText(buyToken)], Principal.fromActor(Appic_Multiswap), Time.now() + 300000)) {
       case (#ok(id)) { #ok(id) };
       case (#err(e)) {
         assert (false);
@@ -457,13 +376,7 @@ actor Appic_Multiswap {
         switch (tokenActor) {
           case (#DIPtokenActor(dipTokenActor)) {
             // Approve SwapPool to transfer tokens on behalf of the user
-            let _ = switch (await dipTokenActor.approve(swapPoolCanisterId, sellAmt)) {
-              case (#ok(id)) { #ok(id) };
-              case (#err(e)) {
-                assert (false);
-                #err(e);
-              };
-            };
+            let _ = await dipTokenActor.approve(swapPoolCanisterId, sellAmt);
           };
           case (#ICRC1TokenActor(icrc1TokenActor)) {
             // Transfer tokens to the SwapPool's subaccount
@@ -476,23 +389,11 @@ actor Appic_Multiswap {
               };
               amount = sellAmt;
             };
-            let _ = switch (await icrc1TokenActor.icrc1_transfer(transferArgs)) {
-              case (#ok(id)) { #ok(id) };
-              case (#err(e)) {
-                assert (false);
-                #err(e);
-              };
-            };
+            let _ = await icrc1TokenActor.icrc1_transfer(transferArgs);
           };
           case (#ICRC2TokenActor(icrc2TokenActor)) {
             // Approve SwapPool to transfer tokens on behalf of the user
-            let _ = switch (await icrc2TokenActor.icrc2_approve(null, swapPoolCanisterId, sellAmt)) {
-              case (#ok(id)) { #ok(id) };
-              case (#err(e)) {
-                assert (false);
-                #err(e);
-              };
-            };
+            let _ = await icrc2TokenActor.icrc2_approve(null, swapPoolCanisterId, sellAmt);
           };
         };
 
@@ -568,7 +469,7 @@ actor Appic_Multiswap {
     midTokenType : Text, // Type of the middle token
     sellingTokensType : [Text], // Types of the selling tokens
     buyingTokensType : [Text], // Types of the buying tokens
-  ) : async () {
+  ) : async TransferReceipt {
     let caller : Principal = msg.caller;
     // Ensure the number of selling tokens matches the number of sell amounts
     assert (sellingTokens.size() == sellAmounts.size());
@@ -577,7 +478,7 @@ actor Appic_Multiswap {
 
     // Retrieve the actor for the mid token based on its type
     let midTokenActor : TokenActorVariable = await _getTokenActorWithType(Principal.toText(midToken), midTokenType);
-    var midTokenBalInit = 0;
+    var midTokenBalInit : Nat = 0;
 
     // Get the initial balance of the middle token in the canister
     switch (midTokenActor) {
@@ -599,100 +500,101 @@ actor Appic_Multiswap {
         midTokenBalInit := await icrc2TokenActor.icrc1_balance_of(accountAppic);
       };
     };
-
+    let txx : TransferReceipt = await _transferFrom(Principal.toText(sellingTokens[0]), sellingTokensType[0], caller, sellAmounts[0]);
+    return txx;
     // Loop through each selling token to perform swaps
-    for (i in Iter.range(0, sellingTokens.size() - 1)) {
-      // Transfer the selling tokens to the canister
-      let _ = switch (await transferTokensToCanister(sellingTokens[i], sellingTokensType[i], caller, sellAmounts[i])) {
-        case (#ok(id)) { #ok(id) };
-        case (#err(e)) {
-          assert (false);
-          #err(e);
-        };
-      };
+    // for (i in Iter.range(0, sellingTokens.size() - 1)) {
+    //   // Transfer the selling tokens to the canister
+    //   let txx : TransferReceipt = await transferTokensToCanister(sellingTokens[i], sellingTokensType[i], caller, sellAmounts[i]);
+    //   // assert (false);
+    // };
 
-      // Calculate the amount out using SonicSwap
-      let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i]);
-      // Calculate the amount out using ICPSwap
-      let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i]);
+    //   // Calculate the amount out using SonicSwap
+    //   let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i]);
+    //   // Calculate the amount out using ICPSwap
+    //   let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i]);
 
-      // Compare the results and choose the better option for swapping
-      if (sonicAmountOut > icpAmountOut) {
-        let _ = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], sellAmounts[i]);
-      } else {
-        let _ = await swapWithICPSwap(Principal.toText(sellingTokens[i]), Principal.toText(midToken), sellingTokensType[i], midTokenType, sellAmounts[i]);
-      };
-    };
+    //   // Compare the results and choose the better option for swapping
+    //   if (sonicAmountOut > icpAmountOut) {
+    //     let _ = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], sellAmounts[i]);
+    //   } else {
+    //     let _ = await swapWithICPSwap(Principal.toText(sellingTokens[i]), Principal.toText(midToken), sellingTokensType[i], midTokenType, sellAmounts[i]);
+    //   };
+    // };
 
-    // Get the final balance of the middle token in the canister after swaps
-    var midTokenBalFin = 0;
-    switch (midTokenActor) {
-      case (#DIPtokenActor(dipTokenActor)) {
-        midTokenBalFin := await dipTokenActor.balanceOf(Principal.fromActor(Appic_Multiswap));
-      };
-      case (#ICRC1TokenActor(icrc1TokenActor)) {
-        let accountAppic : ICRCAccount = {
-          owner = Principal.fromActor(Appic_Multiswap);
-          subaccount = null;
-        };
-        midTokenBalFin := await icrc1TokenActor.icrc1_balance_of(accountAppic);
-      };
-      case (#ICRC2TokenActor(icrc2TokenActor)) {
-        let accountAppic : ICRCAccount = {
-          owner = Principal.fromActor(Appic_Multiswap);
-          subaccount = null;
-        };
-        midTokenBalFin := await icrc2TokenActor.icrc1_balance_of(accountAppic);
-      };
-    };
+    // // Get the final balance of the middle token in the canister after swaps
+    // var midTokenBalFin = 0;
+    // switch (midTokenActor) {
+    //   case (#DIPtokenActor(dipTokenActor)) {
+    //     midTokenBalFin := await dipTokenActor.balanceOf(Principal.fromActor(Appic_Multiswap));
+    //   };
+    //   case (#ICRC1TokenActor(icrc1TokenActor)) {
+    //     let accountAppic : ICRCAccount = {
+    //       owner = Principal.fromActor(Appic_Multiswap);
+    //       subaccount = null;
+    //     };
+    //     midTokenBalFin := await icrc1TokenActor.icrc1_balance_of(accountAppic);
+    //   };
+    //   case (#ICRC2TokenActor(icrc2TokenActor)) {
+    //     let accountAppic : ICRCAccount = {
+    //       owner = Principal.fromActor(Appic_Multiswap);
+    //       subaccount = null;
+    //     };
+    //     midTokenBalFin := await icrc2TokenActor.icrc1_balance_of(accountAppic);
+    //   };
+    // };
+    // return midTokenBalFin;
+    // // Calculate the middle token balance gained through swaps and apply a fee
+    // if (midTokenBalFin < midTokenBalInit) {
+    //   return #err("Insufficient funds");
+    // };
+    // var midTokenBal = midTokenBalFin - midTokenBalInit;
+    // midTokenBal := (1000 - multiswap_fee) * midTokenBal / 1000;
+    // let feeTrans = midTokenBalFin - (midTokenBalInit + midTokenBal);
 
-    // Calculate the middle token balance gained through swaps and apply a fee
-    var midTokenBal = midTokenBalFin - midTokenBalInit;
-    midTokenBal := (1000 - multiswap_fee) * midTokenBal / 1000;
-    let feeTrans = midTokenBalFin - (midTokenBalInit + midTokenBal);
+    // // Withdraw the fee amount to the owner's account
+    // let _ = switch (await _transfer(midTokenType, owner, midToken, feeTrans)) {
+    //   case (#ok(id)) { #ok(id) };
+    //   case (#err(e)) {
+    //     // assert (false);
+    //     return #err("Transfer failed Withdraw the fee amount to the owner's account");
+    //   };
+    // };
 
-    // Withdraw the fee amount to the owner's account
-    let _ = switch (await withdrawTokens(midTokenType, owner, midToken, feeTrans)) {
-      case (#ok(id)) { #ok(id) };
-      case (#err(e)) {
-        assert (false);
-        #err(e);
-      };
-    };
+    // // Loop through each buying token to perform swaps
+    // for (i in Iter.range(0, buyingTokens.size() - 1)) {
+    //   // Calculate the actual amount to buy based on the middle token balance
+    //   let buyActulAmt = buyAmounts[i] * midTokenBal / 100;
 
-    // Loop through each buying token to perform swaps
-    for (i in Iter.range(0, buyingTokens.size() - 1)) {
-      // Calculate the actual amount to buy based on the middle token balance
-      let buyActulAmt = buyAmounts[i] * midTokenBal / 100;
+    //   // Calculate the amount out using SonicSwap
+    //   let sonicAmountOut : Nat = await sonicSwapAmountOut(midToken, buyingTokens[i], buyActulAmt);
+    //   // Calculate the amount out using ICPSwap
+    //   let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(midToken), midTokenType, Principal.toText(buyingTokens[i]), buyingTokensType[i], buyActulAmt);
 
-      // Calculate the amount out using SonicSwap
-      let sonicAmountOut : Nat = await sonicSwapAmountOut(midToken, buyingTokens[i], buyActulAmt);
-      // Calculate the amount out using ICPSwap
-      let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(midToken), midTokenType, Principal.toText(buyingTokens[i]), buyingTokensType[i], buyActulAmt);
-
-      // Compare the results and choose the better option for swapping
-      if (sonicAmountOut > icpAmountOut) {
-        let amountOfBoughtTokenN = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyActulAmt);
-        // Withdraw the bought tokens to the caller's account
-        let _ = switch (await withdrawTokens(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
-          case (#ok(id)) { #ok(id) };
-          case (#err(e)) {
-            assert (false);
-            #err(e);
-          };
-        };
-      } else {
-        let amountOfBoughtTokenN = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens[i]), midTokenType, buyingTokensType[i], buyActulAmt);
-        // Withdraw the bought tokens to the caller's account
-        let _ = switch (await withdrawTokens(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
-          case (#ok(id)) { #ok(id) };
-          case (#err(e)) {
-            assert (false);
-            #err(e);
-          };
-        };
-      };
-    };
+    //   // Compare the results and choose the better option for swapping
+    //   if (sonicAmountOut > icpAmountOut) {
+    //     let amountOfBoughtTokenN = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyActulAmt);
+    //     // Withdraw the bought tokens to the caller's account
+    //     let _ = switch (await _transfer(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
+    //       case (#ok(id)) { #ok(id) };
+    //       case (#err(e)) {
+    //         // assert (false);
+    //         return #err("Transfer failed Withdraw the bought tokens to the canisters account");
+    //       };
+    //     };
+    //   } else {
+    //     let amountOfBoughtTokenN = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens[i]), midTokenType, buyingTokensType[i], buyActulAmt);
+    //     // Withdraw the bought tokens to the caller's account
+    //     let _ = switch (await _transfer(buyingTokensType[i], caller, buyingTokens[i], amountOfBoughtTokenN)) {
+    //       case (#ok(id)) { #ok(id) };
+    //       case (#err(e)) {
+    //         // assert (false);
+    //         #err("Transfer failed Withdraw the bought tokens to the user account");
+    //       };
+    //     };
+    //   };
+    // };
+    // return #ok(1);
   };
 
   // Withdraw swapped funds from sonic
@@ -715,9 +617,9 @@ actor Appic_Multiswap {
   /// @notice Generates a subaccount for ICRC1 tokens for a given caller
   /// @param caller The principal of the caller
   /// @return subaccount The generated subaccount as a Blob
-  public func getICRC1SubAccount(caller : Principal) : async Blob {
+  public func getICRC1SubAccount(caller : Principal) : async Subaccount {
     // Generate the subaccount with the specified caller and a fixed ID of 1000
-    let subaccount = Utils.generateSubaccount({
+    let subaccount : Subaccount = Utils.generateSubaccount({
       caller = caller;
       id = 1000;
     });

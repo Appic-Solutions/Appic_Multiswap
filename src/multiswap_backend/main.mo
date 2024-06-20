@@ -194,9 +194,10 @@ actor Appic_Multiswap {
    */
   private func _transferFrom(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
     let tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
+    let fee = await getfeeToken(tokenId, tokenType);
     switch (tokenCanister) {
       case (#DIPtokenActor(dipTokenActor)) {
-        let txid : TransferReceipt = await dipTokenActor.transferFrom(caller, Principal.fromActor(Appic_Multiswap), value);
+        let txid : TransferReceipt = await dipTokenActor.transferFrom(caller, Principal.fromActor(Appic_Multiswap), value -fee);
         return txid;
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
@@ -208,7 +209,7 @@ actor Appic_Multiswap {
             owner = Principal.fromActor(Appic_Multiswap);
             subaccount = ?defaultSubaccount;
           };
-          amount = value;
+          amount = value -fee;
         };
         let txid : TransferReceipt = await icrc1TokenActor.icrc1_transfer(transferArg);
         return txid;
@@ -221,7 +222,7 @@ actor Appic_Multiswap {
             owner = Principal.fromActor(Appic_Multiswap);
             subaccount = ?defaultSubaccount;
           };
-          amount = value;
+          amount = value -fee;
         };
         let txid : TransferReceipt = await icrc2TokenActor.icrc2_transfer_from(transferArg);
         return txid;
@@ -241,9 +242,10 @@ actor Appic_Multiswap {
    */
   private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
     let tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
+    let fee = await getfeeToken(tokenId, tokenType);
     switch (tokenCanister) {
       case (#DIPtokenActor(dipTokenActor)) {
-        let txid : TransferReceipt = await dipTokenActor.transfer(caller, value);
+        let txid : TransferReceipt = await dipTokenActor.transfer(caller, (value -fee));
         return txid;
       };
       case (#ICRC1TokenActor(icrc1TokenActor)) {
@@ -251,7 +253,7 @@ actor Appic_Multiswap {
         let transferArg : ICRCTransferArg = {
           from_subaccount = ?defaultSubaccount;
           to = { owner = caller; subaccount = ?defaultSubaccount };
-          amount = value;
+          amount = value -fee;
         };
         let txid : TransferReceipt = await icrc1TokenActor.icrc1_transfer(transferArg);
         return txid;
@@ -261,7 +263,7 @@ actor Appic_Multiswap {
         let transferArg : ICRCTransferArg = {
           from_subaccount = ?defaultSubaccount;
           to = { owner = caller; subaccount = ?defaultSubaccount };
-          amount = value;
+          amount = value -fee;
         };
         let txid : TransferReceipt = await icrc2TokenActor.icrc1_transfer(transferArg);
         return txid;
@@ -276,7 +278,7 @@ actor Appic_Multiswap {
   /// @param sellTokenType The standard of the token to sell
   /// @param sellAmt The amount of the token to sell
   /// @return The amount of the bought token received
-  private func swapWithSonic(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
+  public func swapWithSonic(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     // Get the token actor for the sell token
     let tokenActor : TokenActorVariable = await _getTokenActorWithType(Principal.toText(sellToken), sellTokenType);
 
@@ -293,16 +295,16 @@ actor Appic_Multiswap {
       case (#ICRC1TokenActor(icrc1TokenActor)) {
         // Transfer ICRC1 tokens to SonicSwap
         let getSubbaccount : Blob = await sonicCanister.initiateICRC1Transfer();
+        fee := await icrc1TokenActor.icrc1_fee();
         let transferArgs : ICRCTransferArg = {
           from_subaccount = null;
           to : ICRCAccount = {
             owner = sonicCanisterId;
             subaccount = ?getSubbaccount;
           };
-          amount = sellAmt;
+          amount = sellAmt -fee;
         };
         let _ = await icrc1TokenActor.icrc1_transfer(transferArgs);
-        fee := await icrc1TokenActor.icrc1_fee();
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
         // Approve SonicSwap to transfer tokens on behalf of the user
@@ -319,7 +321,7 @@ actor Appic_Multiswap {
     };
 
     // Deposit the sell tokens to SonicSwap
-    let _ = await sonicCanister.deposit(sellToken, sellAmt -fee);
+    let _ = await sonicCanister.deposit(sellToken, sellAmt -(2 * fee));
 
     let sonicBalanceOfSellToken = await sonicCanister.balanceOf(Principal.toText(sellToken), Principal.fromActor(Appic_Multiswap));
     // Perform the token swap with SonicSwap
@@ -330,8 +332,9 @@ actor Appic_Multiswap {
     // Calculate the amount of bought token received
     let amountOfBoughtToken = sonicBalanceOfBuyTokenAfterTrade - sonicBalanceOfBuyTokenBeforeTrade;
 
+    let fee_buy = await getfeeToken(Principal.toText(buyToken), buyTokenType);
     // Withdraw the bought tokens from SonicSwap
-    let _ = switch (await sonicCanister.withdraw(buyToken, amountOfBoughtToken)) {
+    let _ = switch (await sonicCanister.withdraw(buyToken, amountOfBoughtToken -fee_buy)) {
       case (#ok(_)) {};
       case (#err(_)) {
         assert (false);
@@ -367,7 +370,7 @@ actor Appic_Multiswap {
   /// @param buyTokenType The standard of the token to buy
   /// @param sellAmt The amount of the token to sell
   /// @return The amount of the bought token received
-  private func swapWithICPSwap(
+  public func swapWithICPSwap(
     sellToken : Text,
     buyToken : Text,
     sellTokenType : Text,
@@ -394,44 +397,44 @@ actor Appic_Multiswap {
             let depositArgs : DepositArgs = {
               fee = fee_sell;
               token = sellToken;
-              amount = sellAmt;
+              amount = sellAmt -fee_sell;
             };
             let _ = await swapPoolCanister.depositFrom(depositArgs);
           };
           case (#ICRC1TokenActor(icrc1TokenActor)) {
             // Transfer ICRC1 tokens to SonicSwap
             let getSubbaccount : Blob = await principalToBlobICPswap(Principal.fromActor(Appic_Multiswap));
+            fee_sell := await icrc1TokenActor.icrc1_fee();
             let transferArgs : ICRCTransferArg = {
               from_subaccount = null;
               to : ICRCAccount = {
                 owner = swapPoolCanisterId;
                 subaccount = ?getSubbaccount;
               };
-              amount = sellAmt;
+              amount = sellAmt -fee_sell;
             };
             let _ = await icrc1TokenActor.icrc1_transfer(transferArgs);
-            fee_sell := await icrc1TokenActor.icrc1_fee();
             // Deposit tokens to the SwapPool
             let depositArgs : DepositArgs = {
               fee = fee_sell;
               token = sellToken;
-              amount = sellAmt;
+              amount = sellAmt -fee_sell;
             };
             let _ = await swapPoolCanister.deposit(depositArgs);
           };
           case (#ICRC2TokenActor(icrc2TokenActor)) {
             // Approve ICPSwap to transfer tokens on behalf of the user
             let getSubbaccount : Blob = await principalToBlobICPswap(Principal.fromActor(Appic_Multiswap));
+            fee_sell := await icrc2TokenActor.icrc1_fee();
             let transferArgs : ICRCTransferArg = {
               from_subaccount = null;
               to : ICRCAccount = {
                 owner = swapPoolCanisterId;
                 subaccount = ?getSubbaccount;
               };
-              amount = sellAmt;
+              amount = sellAmt -fee_sell;
             };
             let _ = await icrc2TokenActor.icrc1_transfer(transferArgs);
-            fee_sell := await icrc2TokenActor.icrc1_fee();
             let depositArgs : DepositArgs = {
               fee = fee_sell;
               token = sellToken;
@@ -443,7 +446,7 @@ actor Appic_Multiswap {
         let zto : Bool = poolData.token0.address == sellToken;
         // Perform the swap
         let swapArgs : SwapArgs = {
-          amountIn = Nat.toText(sellAmt);
+          amountIn = Nat.toText(sellAmt -fee_sell);
           zeroForOne = zto; // Adjust as necessary based on trade direction
           amountOutMinimum = "0"; // No minimum amount restriction
         };
@@ -471,7 +474,7 @@ actor Appic_Multiswap {
         let withdrawArgs = {
           fee = fee_buy;
           token = buyToken;
-          amount = amountOut;
+          amount = amountOut -fee_buy;
         };
         let _ = switch (await swapPoolCanister.withdraw(withdrawArgs)) {
           case (#ok(id)) { #ok(id) };
@@ -590,12 +593,12 @@ actor Appic_Multiswap {
       // Transfer the selling tokens to the canister
       let fee = await getfeeToken(Principal.toText(sellingTokens[i]), sellingTokensType[i]);
 
-      let _ = await _transferFrom(Principal.toText(sellingTokens[i]), sellingTokensType[i], caller, sellAmounts[i] -fee);
+      let _ = await _transferFrom(Principal.toText(sellingTokens[i]), sellingTokensType[i], caller, sellAmounts[i]);
 
       // Calculate the amount out using SonicSwap
-      let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i]);
+      let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i] -fee);
       // Calculate the amount out using ICPSwap
-      let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i]);
+      let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i] -fee);
       if (sellingTokens[i] != midToken) {
         // Compare the results and choose the better option for swapping
         if (sonicAmountOut > icpAmountOut) {
@@ -752,7 +755,7 @@ actor Appic_Multiswap {
         // Get the balance of the ICRC1 tokens in the specified account
         let bal = await icrc1TokenActor.icrc1_balance_of(account);
         let fee = await icrc1TokenActor.icrc1_fee();
-        if (bal == 0) {
+        if (bal < fee) {
           // If balance is zero, do nothing
           return;
         } else {
@@ -762,7 +765,7 @@ actor Appic_Multiswap {
           let transferArgs : ICRCTransferArg = {
             from_subaccount = null;
             to : ICRCAccount = {
-              owner = sonicCanisterId;
+              owner = msg.caller;
               subaccount = ?getSubbaccount;
             };
             amount = bal -fee;

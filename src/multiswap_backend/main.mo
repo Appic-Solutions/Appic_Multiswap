@@ -861,17 +861,37 @@ actor Appic_Multiswap {
     let sonicAmountOut : Nat = await sonicSwapAmountOut(sellToken, buyToken, sellAmt -fee);
     // Calculate the amount out using ICPSwap
     let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellToken), sellTokenType, Principal.toText(buyToken), buyTokenType, sellAmt -fee);
-    if (sellToken != buyToken) {
-      // Compare the results and choose the better option for swapping
-      if (sonicAmountOut > icpAmountOut) {
-        return await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
-      } else if (sonicAmountOut < icpAmountOut) {
-        return await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
-      } else {
-        assert (false);
-        return 0;
-      };
+
+    // Compare the results and choose the better option for swapping
+    if (sonicAmountOut > icpAmountOut) {
+      let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
+      let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+      return buyActulAmt;
+    } else if (sonicAmountOut < icpAmountOut) {
+      let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
+      let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+      return buyActulAmt;
+    } else {
+      assert (false);
+      return 0;
     };
-    return 0;
+  };
+
+  public shared (msg) func sonicSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
+    let caller : Principal = msg.caller;
+    let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
+    let _ = await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt);
+    let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
+    let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+    return buyActulAmt;
+  };
+
+  public shared (msg) func icpSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
+    let caller : Principal = msg.caller;
+    let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
+    let _ = await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt);
+    let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
+    let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+    return buyActulAmt;
   };
 };

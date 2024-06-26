@@ -8,18 +8,19 @@ import Principal "mo:base/Principal";
 import Array "mo:base/Array";
 import CRC32 "./CRC32";
 module {
+    type Subaccount = Blob;
 
     public type GenerateSubaccountArgs = {
         caller : Principal;
         id : Nat;
     };
 
-    public func defaultSubAccount() : Blob {
+    public func defaultSubAccount() : Subaccount {
         var index : Nat8 = 0;
         return Blob.fromArray([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, index]);
     };
 
-    public func generateSubaccount(args : GenerateSubaccountArgs) : Blob {
+    public func generateSubaccount(args : GenerateSubaccountArgs) : Subaccount {
         let idHash = SHA224.Digest();
         // Length of domain separator
         idHash.write([0x0A]);

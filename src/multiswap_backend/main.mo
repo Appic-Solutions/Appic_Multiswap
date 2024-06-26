@@ -215,7 +215,10 @@ actor Appic_Multiswap {
       };
       case (#ICRC2TokenActor(icrc2TokenActor)) {
         let transferArg : ICRC2TransferArg = {
-          from = { owner = caller; subaccount = null };
+          from = {
+            owner = caller;
+            subaccount = null;
+          };
           to = {
             owner = Principal.fromActor(Appic_Multiswap);
             subaccount = null;
@@ -238,7 +241,7 @@ actor Appic_Multiswap {
    * @param value The amount of tokens to transfer
    * @return Transfer receipt indicating success or error
    */
-  public func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
+  private func _transfer(tokenId : Text, tokenType : Text, caller : Principal, value : Nat) : async TransferReceipt {
     let tokenCanister : TokenActorVariable = await _getTokenActorWithType(tokenId, tokenType);
     let fee = await getfeeToken(tokenId, tokenType);
     switch (tokenCanister) {
@@ -276,7 +279,7 @@ actor Appic_Multiswap {
   * @param sellAmt The amount of the token to sell
   * @return The amount of the bought token received
   */
-  public func swapWithSonic(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
+  private func swapWithSonic(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     // Get the token actor for the sell token
     let tokenActor : TokenActorVariable = await _getTokenActorWithType(Principal.toText(sellToken), sellTokenType);
     var fee = 0;
@@ -346,7 +349,7 @@ actor Appic_Multiswap {
   * @param sellAmt The amount of the token to sell
   * @return The amount of the bought token received
   */
-  public func swapWithICPSwap(
+  private func swapWithICPSwap(
     sellToken : Text,
     buyToken : Text,
     sellTokenType : Text,
@@ -702,7 +705,6 @@ actor Appic_Multiswap {
   * @param midTokenType The type of the intermediate token (e.g., "DIP20", "ICRC1", "ICRC2")
   * @param sellingTokensType Array of types of tokens to sell
   * @param buyingTokensType Array of types of tokens to buy
-  * @param caller The principal of the caller
   */
   public shared (msg) func multiswap(
     sellingTokens : [Principal], // List of tokens being sold
@@ -880,18 +882,30 @@ actor Appic_Multiswap {
   public shared (msg) func sonicSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
-    let _ = await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt);
-    let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
-    let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-    return buyActulAmt;
+    let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
+      case (#Ok(_)) {
+        let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
+        let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+        return buyActulAmt;
+      };
+      case (#Err(_)) {
+        return 0;
+      };
+    };
   };
 
   public shared (msg) func icpSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
-    let _ = await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt);
-    let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
-    let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-    return buyActulAmt;
+    let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
+      case (#Ok(_)) {
+        let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
+        let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
+        return buyActulAmt;
+      };
+      case (#Err(_)) {
+        return 0;
+      };
+    };
   };
 };

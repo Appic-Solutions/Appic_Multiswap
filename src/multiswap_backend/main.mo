@@ -706,97 +706,97 @@ actor Appic_Multiswap {
   * @param sellingTokensType Array of types of tokens to sell
   * @param buyingTokensType Array of types of tokens to buy
   */
-  public shared (msg) func multiswap(
-    sellingTokens : [Principal], // List of tokens being sold
-    buyingTokens : [Principal], // List of tokens being bought
-    sellAmounts : [Nat], // Amounts of tokens being sold
-    buyAmounts : [Nat], // Amounts of tokens being bought
-    midToken : Principal, // The middle token used for swaps
-    midTokenType : Text, // Type of the middle token
-    sellingTokensType : [Text], // Types of the selling tokens
-    buyingTokensType : [Text], // Types of the buying tokens
-  ) : async () {
-    // Ensure the number of selling tokens,buying tokens matches the number of sell amounts, buy amounts
-    assert (sellingTokens.size() == sellAmounts.size());
-    assert (buyingTokens.size() == buyAmounts.size());
-    let caller : Principal = msg.caller;
-    var midTokenBal = 0;
+  // public shared (msg) func multiswap(
+  //   sellingTokens : [Principal], // List of tokens being sold
+  //   buyingTokens : [Principal], // List of tokens being bought
+  //   sellAmounts : [Nat], // Amounts of tokens being sold
+  //   buyAmounts : [Nat], // Amounts of tokens being bought
+  //   midToken : Principal, // The middle token used for swaps
+  //   midTokenType : Text, // Type of the middle token
+  //   sellingTokensType : [Text], // Types of the selling tokens
+  //   buyingTokensType : [Text], // Types of the buying tokens
+  // ) : async () {
+  //   // Ensure the number of selling tokens,buying tokens matches the number of sell amounts, buy amounts
+  //   assert (sellingTokens.size() == sellAmounts.size());
+  //   assert (buyingTokens.size() == buyAmounts.size());
+  //   let caller : Principal = msg.caller;
+  //   var midTokenBal = 0;
 
-    // Loop through each selling token to perform swaps
-    for (i in Iter.range(0, sellingTokens.size() - 1)) {
-      let fee = await getfeeToken(Principal.toText(sellingTokens[i]), sellingTokensType[i]);
-      let _ = await _transferFrom(Principal.toText(sellingTokens[i]), sellingTokensType[i], caller, sellAmounts[i]);
+  //   // Loop through each selling token to perform swaps
+  //   for (i in Iter.range(0, sellingTokens.size() - 1)) {
+  //     let fee = await getfeeToken(Principal.toText(sellingTokens[i]), sellingTokensType[i]);
+  //     let _ = await _transferFrom(Principal.toText(sellingTokens[i]), sellingTokensType[i], caller, sellAmounts[i]);
 
-      if (sellingTokens[i] != midToken) {
-        let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i] -fee);
-        let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i] -fee);
+  //     if (sellingTokens[i] != midToken) {
+  //       let sonicAmountOut : Nat = await sonicSwapAmountOut(sellingTokens[i], midToken, sellAmounts[i] -fee);
+  //       let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(sellingTokens[i]), sellingTokensType[i], Principal.toText(midToken), midTokenType, sellAmounts[i] -fee);
 
-        if (sonicAmountOut > icpAmountOut) {
-          let buyActulAmt = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], midTokenType, sellAmounts[i] -fee);
-          midTokenBal := midTokenBal +buyActulAmt;
-        } else if (sonicAmountOut < icpAmountOut) {
-          let buyActulAmt = await swapWithICPSwap(Principal.toText(sellingTokens[i]), Principal.toText(midToken), sellingTokensType[i], midTokenType, sellAmounts[i] -fee);
-          midTokenBal := midTokenBal +buyActulAmt;
-        } else {
-          assert (false);
-        };
-      } else {
-        midTokenBal := midTokenBal +sellAmounts[i] -fee;
-      };
-    };
+  //       if (sonicAmountOut > icpAmountOut) {
+  //         let buyActulAmt = await swapWithSonic(sellingTokens[i], midToken, sellingTokensType[i], midTokenType, sellAmounts[i] -fee);
+  //         midTokenBal := midTokenBal +buyActulAmt;
+  //       } else if (sonicAmountOut < icpAmountOut) {
+  //         let buyActulAmt = await swapWithICPSwap(Principal.toText(sellingTokens[i]), Principal.toText(midToken), sellingTokensType[i], midTokenType, sellAmounts[i] -fee);
+  //         midTokenBal := midTokenBal +buyActulAmt;
+  //       } else {
+  //         assert (false);
+  //       };
+  //     } else {
+  //       midTokenBal := midTokenBal +sellAmounts[i] -fee;
+  //     };
+  //   };
 
-    let midBal = midTokenBal;
-    midTokenBal := (1000 - multiswap_fee) * midTokenBal / 1000;
-    let feeTrans = midBal - midTokenBal;
+  //   let midBal = midTokenBal;
+  //   midTokenBal := (1000 - multiswap_fee) * midTokenBal / 1000;
+  //   let feeTrans = midBal - midTokenBal;
 
-    if (feeTrans != 0) {
-      // Withdraw the fee amount to the owner's account
-      let _ = switch (await _transfer(Principal.toText(midToken), midTokenType, owner, feeTrans)) {
-        case (#Ok(id)) { #Ok(id) };
-        case (#Err(e)) {
-          #Err(e);
-        };
-      };
-    };
+  //   if (feeTrans != 0) {
+  //     // Withdraw the fee amount to the owner's account
+  //     let _ = switch (await _transfer(Principal.toText(midToken), midTokenType, owner, feeTrans)) {
+  //       case (#Ok(id)) { #Ok(id) };
+  //       case (#Err(e)) {
+  //         #Err(e);
+  //       };
+  //     };
+  //   };
 
-    for (i in Iter.range(0, buyingTokens.size() - 1)) {
-      let buyActulAmt = buyAmounts[i] * midTokenBal / 100;
+  //   for (i in Iter.range(0, buyingTokens.size() - 1)) {
+  //     let buyActulAmt = buyAmounts[i] * midTokenBal / 100;
 
-      if (buyingTokens[i] != midToken) {
-        let sonicAmountOut : Nat = await sonicSwapAmountOut(midToken, buyingTokens[i], buyActulAmt);
-        let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(midToken), midTokenType, Principal.toText(buyingTokens[i]), buyingTokensType[i], buyActulAmt);
-        if (sonicAmountOut > icpAmountOut) {
-          let amountOfBoughtTokenN = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyingTokensType[i], buyActulAmt);
-          let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, amountOfBoughtTokenN)) {
-            case (#Ok(id)) { #Ok(id) };
-            case (#Err(e)) {
-              assert (false);
-              #Err(e);
-            };
-          };
-        } else if (sonicAmountOut < icpAmountOut) {
-          let amountOfBoughtTokenN = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens[i]), midTokenType, buyingTokensType[i], buyActulAmt);
-          let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, amountOfBoughtTokenN)) {
-            case (#Ok(id)) { #Ok(id) };
-            case (#Err(e)) {
-              assert (false);
-              #Err(e);
-            };
-          };
-        } else {
-          assert (false);
-        };
-      } else {
-        let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, buyActulAmt)) {
-          case (#Ok(id)) { #Ok(id) };
-          case (#Err(e)) {
-            assert (false);
-            #Err(e);
-          };
-        };
-      };
-    };
-  };
+  //     if (buyingTokens[i] != midToken) {
+  //       let sonicAmountOut : Nat = await sonicSwapAmountOut(midToken, buyingTokens[i], buyActulAmt);
+  //       let icpAmountOut : Nat = await icpSwapAmountOut(Principal.toText(midToken), midTokenType, Principal.toText(buyingTokens[i]), buyingTokensType[i], buyActulAmt);
+  //       if (sonicAmountOut > icpAmountOut) {
+  //         let amountOfBoughtTokenN = await swapWithSonic(midToken, buyingTokens[i], midTokenType, buyingTokensType[i], buyActulAmt);
+  //         let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, amountOfBoughtTokenN)) {
+  //           case (#Ok(id)) { #Ok(id) };
+  //           case (#Err(e)) {
+  //             assert (false);
+  //             #Err(e);
+  //           };
+  //         };
+  //       } else if (sonicAmountOut < icpAmountOut) {
+  //         let amountOfBoughtTokenN = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens[i]), midTokenType, buyingTokensType[i], buyActulAmt);
+  //         let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, amountOfBoughtTokenN)) {
+  //           case (#Ok(id)) { #Ok(id) };
+  //           case (#Err(e)) {
+  //             assert (false);
+  //             #Err(e);
+  //           };
+  //         };
+  //       } else {
+  //         assert (false);
+  //       };
+  //     } else {
+  //       let _ = switch (await _transfer(Principal.toText(buyingTokens[i]), buyingTokensType[i], caller, buyActulAmt)) {
+  //         case (#Ok(id)) { #Ok(id) };
+  //         case (#Err(e)) {
+  //           assert (false);
+  //           #Err(e);
+  //         };
+  //       };
+  //     };
+  //   };
+  // };
 
   /**
  * @notice Swaps tokens through a mid-token to get the best possible exchange rate.

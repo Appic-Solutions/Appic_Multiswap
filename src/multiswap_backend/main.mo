@@ -797,6 +797,17 @@ actor Appic_Multiswap {
       };
     };
   };
+
+  /**
+ * @notice Swaps tokens through a mid-token to get the best possible exchange rate.
+ * @param sellingTokens The token being sold.
+ * @param midToken The intermediate token used for swapping.
+ * @param buyingTokens The token being bought.
+ * @param sellAmounts The amount of tokens being sold.
+ * @param sellingTokensType The type of the selling token.
+ * @param midTokenType The type of the intermediate token.
+ * @param buyingTokensType The type of the buying token.
+ */
   public shared (msg) func swapWithMidToken(
     sellingTokens : Principal,
     midToken : Principal,
@@ -838,6 +849,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @notice Performs a single swap comparing SonicSwap and ICPSwap to get the best possible rate.
+   * @param sellToken The token being sold.
+   * @param buyToken The token being bought.
+   * @param sellTokenType The type of the selling token.
+   * @param buyTokenType The type of the buying token.
+   * @param sellAmt The amount of tokens being sold.
+   * @return The amount of tokens received from the swap.
+   */
   public shared (msg) func singleComparedSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
@@ -861,6 +881,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @notice Performs a swap using SonicSwap.
+   * @param sellToken The token being sold.
+   * @param buyToken The token being bought.
+   * @param sellTokenType The type of the selling token.
+   * @param buyTokenType The type of the buying token.
+   * @param sellAmt The amount of tokens being sold.
+   * @return The amount of tokens received from the swap.
+   */
   public shared (msg) func sonicSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
@@ -876,6 +905,15 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @notice Performs a swap using ICPSwap.
+   * @param sellToken The token being sold.
+   * @param buyToken The token being bought.
+   * @param sellTokenType The type of the selling token.
+   * @param buyTokenType The type of the buying token.
+   * @param sellAmt The amount of tokens being sold.
+   * @return The amount of tokens received from the swap.
+   */
   public shared (msg) func icpSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);

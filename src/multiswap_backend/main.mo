@@ -283,13 +283,13 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Swaps tokens using the SonicSwap platform
-  * @param sellToken The principal of the token to sell
-  * @param buyToken The principal of the token to buy
-  * @param sellTokenType The standard of the token to sell
-  * @param sellAmt The amount of the token to sell
-  * @return The amount of the bought token received
-  */
+   * @notice Swaps tokens using the SonicSwap platform
+   * @param sellToken The principal of the token to sell
+   * @param buyToken The principal of the token to buy
+   * @param sellTokenType The standard of the token to sell
+   * @param sellAmt The amount of the token to sell
+   * @return The amount of the bought token received
+   */
   private func swapWithSonic(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     // Get the token actor for the sell token
     let tokenActor : TokenActorVariable = await _getTokenActorWithType(Principal.toText(sellToken), sellTokenType);
@@ -352,14 +352,14 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Swaps tokens using the ICPSwap platform
-  * @param sellToken The principal of the token to sell
-  * @param buyToken The principal of the token to buy
-  * @param sellTokenType The standard of the token to sell
-  * @param buyTokenType The standard of the token to buy
-  * @param sellAmt The amount of the token to sell
-  * @return The amount of the bought token received
-  */
+   * @notice Swaps tokens using the ICPSwap platform
+   * @param sellToken The principal of the token to sell
+   * @param buyToken The principal of the token to buy
+   * @param sellTokenType The standard of the token to sell
+   * @param buyTokenType The standard of the token to buy
+   * @param sellAmt The amount of the token to sell
+   * @return The amount of the bought token received
+   */
   private func swapWithICPSwap(
     sellToken : Text,
     buyToken : Text,
@@ -472,10 +472,10 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Converts a Principal to a 32 -byte Blob for ICPswap
-  * @param p The principal to convert
-  * @return The 32 -byte Blob representation of the principal
-  */
+   * @notice Converts a Principal to a 32 -byte Blob for ICPswap
+   * @param p The principal to convert
+   * @return The 32 -byte Blob representation of the principal
+   */
   private func principalToBlobICPswap(p : Principal) : async Blob {
     // Convert the principal to a byte array
     var arr : [Nat8] = Blob.toArray(Principal.toBlob(p));
@@ -506,10 +506,10 @@ actor Appic_Multiswap {
   //       };
 
   /**
-  * @notice Generates a subaccount for ICRC1 tokens for a given caller
-  * @param caller The principal of the caller
-  * @return subaccount The generated subaccount as a Blob
-  */
+   * @notice Generates a subaccount for ICRC1 tokens for a given caller
+   * @param caller The principal of the caller
+   * @return subaccount The generated subaccount as a Blob
+   */
   public query func getICRC1SubAccount(caller : Principal) : async Subaccount {
     // Generate the subaccount with the specified caller and a fixed ID of 1000
     let subaccount : Subaccount = Utils.generateSubaccount({
@@ -521,10 +521,10 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Changes the fee for the multiswap
-  * @param val The new fee value to be set
-  * @notice Can only be called by the owner
-  */
+   * @notice Changes the fee for the multiswap
+   * @param val The new fee value to be set
+   * @notice Can only be called by the owner
+   */
   public shared (msg) func changeFee(val : Nat) : async () {
 
     // Ensure the caller is the owner
@@ -534,10 +534,10 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Changes the owner of the multiswap
-  * @param newOwner The principal of the new owner
-  * @notice Can only be called by the current owner
-  */
+   * @notice Changes the owner of the multiswap
+   * @param newOwner The principal of the new owner
+   * @notice Can only be called by the current owner
+   */
   public shared (msg) func changeOwner(newOwner : Principal) : async () {
     // Ensure the caller is the owner
     assert (msg.caller == owner);
@@ -546,9 +546,9 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Withdraws ICRC1 tokens from the canister to the specified account
-  * @param tokenPrincipal The principal of the token canister
-  */
+   * @notice Withdraws ICRC1 tokens from the canister to the specified account
+   * @param tokenPrincipal The principal of the token canister
+   */
   public shared (msg) func withdrawTransferICRC1(tokenPrincipal : Principal) : async () {
     // Retrieve the token actor for the given principal and type ICRC1
     var tokenCanister : TokenActorVariable = await _getTokenActorWithType(Principal.toText(tokenPrincipal), "ICRC1");
@@ -599,12 +599,12 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Calculates the amount of token1 received for a given amount of token0 using SonicSwap
-  * @param t0 The principal of the first token
-  * @param t1 The principal of the second token
-  * @param amountIn The amount of the first token to swap
-  * @return The amount of the second token received
-  */
+   * @notice Calculates the amount of token1 received for a given amount of token0 using SonicSwap
+   * @param t0 The principal of the first token
+   * @param t1 The principal of the second token
+   * @param amountIn The amount of the first token to swap
+   * @return The amount of the second token received
+   */
   public func sonicSwapAmountOut(t0 : Principal, t1 : Principal, amountIn : Nat) : async Nat {
     // Retrieve the reserves for the token pair from SonicSwap
     let ret : (Nat, Nat) = switch (await sonicCanister.getPair(t0, t1)) {
@@ -629,14 +629,14 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Calculates the amount of token1 received for a given amount of token0 using ICPSwap
-  * @param token0Address The principal of the first token
-  * @param token0Standard The standard of the first token
-  * @param token1Address The principal of the second token
-  * @param token1Standard The standard of the second token
-  * @param amountIn The amount of the first token to swap
-  * @return The amount of the second token received
-  */
+   * @notice Calculates the amount of token1 received for a given amount of token0 using ICPSwap
+   * @param token0Address The principal of the first token
+   * @param token0Standard The standard of the first token
+   * @param token1Address The principal of the second token
+   * @param token1Standard The standard of the second token
+   * @param amountIn The amount of the first token to swap
+   * @return The amount of the second token received
+   */
   public func icpSwapAmountOut(
     token0Address : Text,
     token0Standard : Text,
@@ -682,11 +682,11 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Calculte the fee of token
-  * @param token0Address The principal of the token
-  * @param token0Standard The standard of the token
-  * @return The amount of the fee
-  */
+   * @notice Calculte the fee of token
+   * @param token0Address The principal of the token
+   * @param token0Standard The standard of the token
+   * @return The amount of the fee
+   */
   private func getfeeToken(
     token0Address : Text,
     token0Standard : Text,
@@ -706,17 +706,17 @@ actor Appic_Multiswap {
   };
 
   /**
-  * @notice Performs a multi-token swap
-  * @dev This function handles swapping multiple types of tokens through an intermediate token.
-  * @param sellingTokens Array of token IDs to sell
-  * @param buyingTokens Array of token IDs to buy
-  * @param sellAmounts Array of amounts of each token to sell
-  * @param buyAmounts Array of amounts of each token to buy
-  * @param midToken The intermediate token used for swapping
-  * @param midTokenType The type of the intermediate token (e.g., "DIP20", "ICRC1", "ICRC2")
-  * @param sellingTokensType Array of types of tokens to sell
-  * @param buyingTokensType Array of types of tokens to buy
-  */
+   * @notice Performs a multi-token swap
+   * @dev This function handles swapping multiple types of tokens through an intermediate token.
+   * @param sellingTokens Array of token IDs to sell
+   * @param buyingTokens Array of token IDs to buy
+   * @param sellAmounts Array of amounts of each token to sell
+   * @param buyAmounts Array of amounts of each token to buy
+   * @param midToken The intermediate token used for swapping
+   * @param midTokenType The type of the intermediate token (e.g., "DIP20", "ICRC1", "ICRC2")
+   * @param sellingTokensType Array of types of tokens to sell
+   * @param buyingTokensType Array of types of tokens to buy
+   */
   // public shared (msg) func multiswap(
   //   sellingTokens : [Principal], // List of tokens being sold
   //   buyingTokens : [Principal], // List of tokens being bought
@@ -810,15 +810,15 @@ actor Appic_Multiswap {
   // };
 
   /**
- * @notice Swaps tokens through a mid-token to get the best possible exchange rate.
- * @param sellingTokens The token being sold.
- * @param midToken The intermediate token used for swapping.
- * @param buyingTokens The token being bought.
- * @param sellAmounts The amount of tokens being sold.
- * @param sellingTokensType The type of the selling token.
- * @param midTokenType The type of the intermediate token.
- * @param buyingTokensType The type of the buying token.
- */
+   * @notice Swaps tokens through a mid-token to get the best possible exchange rate.
+   * @param sellingTokens The token being sold.
+   * @param midToken The intermediate token used for swapping.
+   * @param buyingTokens The token being bought.
+   * @param sellAmounts The amount of tokens being sold.
+   * @param sellingTokensType The type of the selling token.
+   * @param midTokenType The type of the intermediate token.
+   * @param buyingTokensType The type of the buying token.
+   */
   public shared (msg) func swapWithMidToken(
     sellingTokens : Principal,
     midToken : Principal,
@@ -946,6 +946,14 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @param {Text} p1 - The principal ID of the user.
+   * @param {Text} p2 - A text parameter for the transaction.
+   * @param {Text} p3 - Another text parameter for the transaction.
+   * @param {Nat} n1 - A natural number parameter for the transaction.
+   * @param {Nat} n2 - Another natural number parameter for the transaction.
+   * @return {async ()} - An asynchronous function that does not return any value.
+   */
   private func addMapping(p1 : Text, p2 : Text, p3 : Text, n1 : Nat, n2 : Nat) : async () {
     let newRecord : TxHistory = { p2 = p2; p3 = p3; n1 = n1; n2 = n2 };
     usersPricipalid.add(p1);
@@ -965,6 +973,10 @@ actor Appic_Multiswap {
     txCounter := txCounter +1;
   };
 
+  /**
+   * @param {Text} p1 - The principal ID of the user.
+   * @return {async [TxHistory]} - An asynchronous array of transaction history records for the user.
+   */
   public query func getUserHistory(p1 : Text) : async [TxHistory] {
     switch (usersHistory.get(p1)) {
       case (?buf) {
@@ -976,6 +988,9 @@ actor Appic_Multiswap {
     };
   };
 
+  /**
+   * @return {async [Text]} - An asynchronous array of all user principal IDs.
+   */
   public query func getUserPrincipal() : async [Text] {
     return Buffer.toArray(usersPricipalid);
   };

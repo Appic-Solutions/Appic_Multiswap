@@ -948,10 +948,10 @@ actor Appic_Multiswap {
 
   /**
    * @param {Text} p1 - The principal ID of the user.
-   * @param {Text} p2 - A text parameter for the transaction.
-   * @param {Text} p3 - Another text parameter for the transaction.
-   * @param {Nat} n1 - A natural number parameter for the transaction.
-   * @param {Nat} n2 - Another natural number parameter for the transaction.
+   * @param {Text} p2 - sell Token id
+   * @param {Text} p3 - buy Token id
+   * @param {Nat} n1 - sell Token amt
+   * @param {Nat} n2 - buy Token amt
    * @return {async ()} - An asynchronous function that does not return any value.
    */
   private func addMapping(p1 : Text, p2 : Text, p3 : Text, n1 : Nat, n2 : Nat) : async () {
@@ -993,5 +993,12 @@ actor Appic_Multiswap {
    */
   public query func getUserPrincipal() : async [Text] {
     return Buffer.toArray(usersPricipalid);
+  };
+
+  /**
+   * @return {async Nat} - Total tx of all user principal IDs.
+   */
+  public query func getTxNumber() : async Nat {
+    return txCounter;
   };
 };

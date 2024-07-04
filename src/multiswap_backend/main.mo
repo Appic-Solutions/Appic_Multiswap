@@ -20,6 +20,7 @@ actor Appic_Multiswap {
     p3 : Text;
     n1 : Nat;
     n2 : Nat;
+    time : Int;
   };
   type Account = {
     owner : Principal;
@@ -955,7 +956,13 @@ actor Appic_Multiswap {
    * @return {async ()} - An asynchronous function that does not return any value.
    */
   private func addMapping(p1 : Text, p2 : Text, p3 : Text, n1 : Nat, n2 : Nat) : async () {
-    let newRecord : TxHistory = { p2 = p2; p3 = p3; n1 = n1; n2 = n2 };
+    let newRecord : TxHistory = {
+      p2 = p2;
+      p3 = p3;
+      n1 = n1;
+      n2 = n2;
+      time = Time.now();
+    };
     usersPricipalid.add(p1);
 
     switch (usersHistory.get(p1)) {

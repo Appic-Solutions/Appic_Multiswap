@@ -165,6 +165,7 @@ actor Appic_Multiswap {
   var multiswap_fee : Nat = 0;
   var owner : Principal = Principal.fromText("ylzdl-4ynxq-btau6-p3vdx-vigzg-s5c3s-7lidk-ivg4i-pqoe2-plgro-4ae");
   var usersHistory = HashMap.HashMap<Text, Buffer.Buffer<TxHistory>>(0, Text.equal, Text.hash);
+  var txCheck = HashMap.HashMap<Text, Bool>(0, Text.equal, Text.hash);
   var usersPricipalid = Buffer.Buffer<Text>(0);
   var txCounter = 0;
 

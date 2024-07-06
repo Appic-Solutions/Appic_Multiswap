@@ -1009,4 +1009,15 @@ actor Appic_Multiswap {
   public query func getTxNumber() : async Nat {
     return txCounter;
   };
+
+  public query func getTxStatus(p : Text) : async Bool {
+    let _ = switch (txCheck.get(p)) {
+      case (?a) {
+        return a;
+      };
+      case (_) {
+        return false;
+      };
+    };
+  };
 };

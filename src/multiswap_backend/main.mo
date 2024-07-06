@@ -165,6 +165,7 @@ actor Appic_Multiswap {
   var multiswap_fee : Nat = 0;
   var owner : Principal = Principal.fromText("ylzdl-4ynxq-btau6-p3vdx-vigzg-s5c3s-7lidk-ivg4i-pqoe2-plgro-4ae");
   var usersHistory = HashMap.HashMap<Text, Buffer.Buffer<TxHistory>>(0, Text.equal, Text.hash);
+  var txCheck = HashMap.HashMap<Text, Bool>(0, Text.equal, Text.hash);
   var usersPricipalid = Buffer.Buffer<Text>(0);
   var txCounter = 0;
 
@@ -828,8 +829,9 @@ actor Appic_Multiswap {
     sellingTokensType : Text,
     midTokenType : Text,
     buyingTokensType : Text,
-  ) : async () {
+  ) : async Nat {
     let caller : Principal = msg.caller;
+    txCheck.put(Principal.toText(caller), false);
     var midTokenBal = 0;
 
     let fee = await getfeeToken(Principal.toText(sellingTokens), sellingTokensType);
@@ -854,12 +856,17 @@ actor Appic_Multiswap {
       let amountOfBoughtToken = await swapWithSonic(midToken, buyingTokens, midTokenType, buyingTokensType, midTokenBal);
       let _ = await _transfer(Principal.toText(buyingTokens), buyingTokensType, caller, amountOfBoughtToken);
       await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken);
+      txCheck.put(Principal.toText(caller), false);
+      return amountOfBoughtToken;
     } else if (sonicAmountOut1 < icpAmountOut1) {
       let amountOfBoughtToken = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens), midTokenType, buyingTokensType, midTokenBal);
       let _ = await _transfer(Principal.toText(buyingTokens), buyingTokensType, caller, amountOfBoughtToken);
       await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken);
+      txCheck.put(Principal.toText(caller), false);
+      return amountOfBoughtToken;
     } else {
       assert (false);
+      return 0;
     };
   };
 
@@ -874,6 +881,7 @@ actor Appic_Multiswap {
    */
   public shared (msg) func singleComparedSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
 
     let _ = await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt);
@@ -885,11 +893,13 @@ actor Appic_Multiswap {
       let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
       let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
       await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+      txCheck.put(Principal.toText(caller), true);
       return buyActulAmt;
     } else if (sonicAmountOut < icpAmountOut) {
       let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
       let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
       await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+      txCheck.put(Principal.toText(caller), true);
       return buyActulAmt;
     } else {
       assert (false);
@@ -908,12 +918,14 @@ actor Appic_Multiswap {
    */
   public shared (msg) func sonicSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
     let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
       case (#Ok(_)) {
         let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
         let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
         await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+        txCheck.put(Principal.toText(caller), true);
         return buyActulAmt;
       };
       case (#Err(_)) {
@@ -933,12 +945,14 @@ actor Appic_Multiswap {
    */
   public shared (msg) func icpSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
     let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
       case (#Ok(_)) {
         let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
         let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
         await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+        txCheck.put(Principal.toText(caller), true);
         return buyActulAmt;
       };
       case (#Err(_)) {
@@ -1007,5 +1021,16 @@ actor Appic_Multiswap {
    */
   public query func getTxNumber() : async Nat {
     return txCounter;
+  };
+
+  public query func getTxStatus(p : Text) : async Bool {
+    let _ = switch (txCheck.get(p)) {
+      case (?a) {
+        return a;
+      };
+      case (_) {
+        return false;
+      };
+    };
   };
 };

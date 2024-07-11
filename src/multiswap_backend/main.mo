@@ -21,6 +21,7 @@ actor Appic_Multiswap {
     n1 : Nat;
     n2 : Nat;
     time : Int;
+    txStatus : Text;
   };
   type Account = {
     owner : Principal;
@@ -438,7 +439,7 @@ actor Appic_Multiswap {
         let zto : Bool = poolData.token0.address == sellToken;
         // Perform the swap
         let swapArgs : SwapArgs = {
-          amountIn = Nat.toText(sellAmt -fee_sell);
+          amountIn = Nat.toText(sellAmt -2 * fee_sell);
           zeroForOne = zto; // Adjust as necessary based on trade direction
           amountOutMinimum = "0"; // No minimum amount restriction
         };
@@ -831,6 +832,7 @@ actor Appic_Multiswap {
     buyingTokensType : Text,
   ) : async Nat {
     let caller : Principal = msg.caller;
+    await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, 0, false);
     txCheck.put(Principal.toText(caller), false);
     var midTokenBal = 0;
 
@@ -855,13 +857,13 @@ actor Appic_Multiswap {
     if (sonicAmountOut1 > icpAmountOut1) {
       let amountOfBoughtToken = await swapWithSonic(midToken, buyingTokens, midTokenType, buyingTokensType, midTokenBal);
       let _ = await _transfer(Principal.toText(buyingTokens), buyingTokensType, caller, amountOfBoughtToken);
-      await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken);
+      await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken, false);
       txCheck.put(Principal.toText(caller), false);
       return amountOfBoughtToken;
     } else if (sonicAmountOut1 < icpAmountOut1) {
       let amountOfBoughtToken = await swapWithICPSwap(Principal.toText(midToken), Principal.toText(buyingTokens), midTokenType, buyingTokensType, midTokenBal);
       let _ = await _transfer(Principal.toText(buyingTokens), buyingTokensType, caller, amountOfBoughtToken);
-      await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken);
+      await addMapping(Principal.toText(caller), Principal.toText(sellingTokens), Principal.toText(buyingTokens), sellAmounts, amountOfBoughtToken, false);
       txCheck.put(Principal.toText(caller), false);
       return amountOfBoughtToken;
     } else {
@@ -881,6 +883,7 @@ actor Appic_Multiswap {
    */
   public shared (msg) func singleComparedSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, 0, true);
     txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
 
@@ -892,13 +895,13 @@ actor Appic_Multiswap {
     if (sonicAmountOut > icpAmountOut) {
       let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
       let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-      await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+      await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt, false);
       txCheck.put(Principal.toText(caller), true);
       return buyActulAmt;
     } else if (sonicAmountOut < icpAmountOut) {
       let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
       let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-      await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+      await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt, false);
       txCheck.put(Principal.toText(caller), true);
       return buyActulAmt;
     } else {
@@ -918,13 +921,14 @@ actor Appic_Multiswap {
    */
   public shared (msg) func sonicSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, 0, true);
     txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
     let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
       case (#Ok(_)) {
         let buyActulAmt = await swapWithSonic(sellToken, buyToken, sellTokenType, buyTokenType, sellAmt -fee);
         let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-        await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+        await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt, false);
         txCheck.put(Principal.toText(caller), true);
         return buyActulAmt;
       };
@@ -945,13 +949,14 @@ actor Appic_Multiswap {
    */
   public shared (msg) func icpSwap(sellToken : Principal, buyToken : Principal, sellTokenType : Text, buyTokenType : Text, sellAmt : Nat) : async Nat {
     let caller : Principal = msg.caller;
+    await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, 0, true);
     txCheck.put(Principal.toText(caller), false);
     let fee = await getfeeToken(Principal.toText(sellToken), sellTokenType);
     let _ = switch (await _transferFrom(Principal.toText(sellToken), sellTokenType, caller, sellAmt)) {
       case (#Ok(_)) {
         let buyActulAmt = await swapWithICPSwap(Principal.toText(sellToken), Principal.toText(buyToken), sellTokenType, buyTokenType, sellAmt -fee);
         let _ = await _transfer(Principal.toText(buyToken), buyTokenType, caller, buyActulAmt);
-        await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt);
+        await addMapping(Principal.toText(caller), Principal.toText(sellToken), Principal.toText(buyToken), sellAmt, buyActulAmt, false);
         txCheck.put(Principal.toText(caller), true);
         return buyActulAmt;
       };
@@ -969,26 +974,49 @@ actor Appic_Multiswap {
    * @param {Nat} n2 - buy Token amt
    * @return {async ()} - An asynchronous function that does not return any value.
    */
-  private func addMapping(p1 : Text, p2 : Text, p3 : Text, n1 : Nat, n2 : Nat) : async () {
-    let newRecord : TxHistory = {
-      p2 = p2;
-      p3 = p3;
-      n1 = n1;
-      n2 = n2;
-      time = Time.now();
-    };
-    usersPricipalid.add(p1);
-
-    switch (usersHistory.get(p1)) {
-      case (?buf) {
-        buf.add(newRecord);
-        usersHistory.put(p1, buf);
+  private func addMapping(p1 : Text, p2 : Text, p3 : Text, n1 : Nat, n2 : Nat, a : Bool) : async () {
+    if (a) {
+      let newRecord : TxHistory = {
+        p2 = p2;
+        p3 = p3;
+        n1 = n1;
+        n2 = n2;
+        time = Time.now();
+        txStatus = "Failed";
       };
-      case (_) {
-        // If it's a new entry for p1, create a new array with the record
-        let newBuff = Buffer.Buffer<TxHistory>(0);
-        newBuff.add(newRecord);
-        usersHistory.put(p1, newBuff);
+      usersPricipalid.add(p1);
+
+      switch (usersHistory.get(p1)) {
+        case (?buf) {
+          buf.add(newRecord);
+          usersHistory.put(p1, buf);
+        };
+        case (_) {
+          // If it's a new entry for p1, create a new array with the record
+          let newBuff = Buffer.Buffer<TxHistory>(0);
+          newBuff.add(newRecord);
+          usersHistory.put(p1, newBuff);
+        };
+      };
+    } else {
+      let newRecord : TxHistory = {
+        p2 = p2;
+        p3 = p3;
+        n1 = n1;
+        n2 = n2;
+        time = Time.now();
+        txStatus = "Successful";
+      };
+
+      switch (usersHistory.get(p1)) {
+        case (?buf) {
+          let _ = buf.removeLast();
+          buf.add(newRecord);
+          usersHistory.put(p1, buf);
+        };
+        case (_) {
+          return;
+        };
       };
     };
     txCounter := txCounter +1;

@@ -13,6 +13,7 @@ import Bool "mo:base/Bool";
 import Account "Account";
 import Buffer "mo:base/Buffer";
 import HashMap "mo:base/HashMap";
+import Result "mo:base/Result";
 
 actor Appic_Multiswap {
   type TxHistory = {
@@ -47,6 +48,11 @@ actor Appic_Multiswap {
   type TransferReceipt = {
     #Ok : Nat; // Indicates a successful transfer with a transaction ID
     #Err : ERR; // Indicates an error occurred during the transfer
+  };
+
+  type Refund_result = {
+    #Ok : TransferReceipt; // Indicates a successful transfer with a transaction ID
+    #Err : Text; // Indicates an error occurred during the transfer
   };
   type sonicActor = sonicTypes.sonicActor;
   type TxReceipt = sonicTypes.TxReceipt;
@@ -164,7 +170,7 @@ actor Appic_Multiswap {
   let sonicCanister : sonicActor = sonicTypes._getSonicActor(sonicCanisterId); // Sonic canister
   let swapFactoryCanister = actor ("4mmnk-kiaaa-aaaag-qbllq-cai") : SwapFactory;
   var multiswap_fee : Nat = 0;
-  var owner : Principal = Principal.fromText("ylzdl-4ynxq-btau6-p3vdx-vigzg-s5c3s-7lidk-ivg4i-pqoe2-plgro-4ae");
+  var owner : Principal = Principal.fromText("matbl-u2myk-jsllo-b5aw6-bxboq-7oon2-h6wmo-awsxf-pcebc-4wpgx-4qe");
   var usersHistory = HashMap.HashMap<Text, Buffer.Buffer<TxHistory>>(0, Text.equal, Text.hash);
   var txCheck = HashMap.HashMap<Text, Bool>(0, Text.equal, Text.hash);
   var usersPricipalid = Buffer.Buffer<Text>(0);
@@ -192,7 +198,8 @@ actor Appic_Multiswap {
         return #ICRC2TokenActor(tokenCanister);
       };
       case (_) {
-        Prelude.unreachable();
+        var tokenCanister : ICRC1TokenActor = actor (tokenId);
+        return #ICRC1TokenActor(tokenCanister);
       };
     };
   };
@@ -472,6 +479,127 @@ actor Appic_Multiswap {
         return 0;
       };
     };
+  };
+
+  // Withdraw from canister balance if the swap or the withdraw fails, can only be called by the owner
+  public shared (msg) func whithdrawFromCanisterBalance(token : Text, user_principal : Text, amount : Nat) : async Refund_result {
+    assert (msg.caller == owner);
+
+    // Retrieve the token actor for the given principal and type ICRC1
+    var tokenCanister : TokenActorVariable = await _getTokenActorWithType(Principal.toText(Principal.fromText(token)), "ICRC1");
+    switch (tokenCanister) {
+
+      case (#ICRC1TokenActor(icrc1TokenActor)) {
+        // Get the subaccount for the current user
+        var userSubAccount : Subaccount = await getICRC1SubAccount(msg.caller);
+        // Define the account with the principal of the canister and the user's subaccount
+        let account : ICRCAccount = {
+          owner = Principal.fromActor(Appic_Multiswap);
+          subaccount = ?userSubAccount;
+        };
+        // Get the balance of the ICRC1 tokens in the specified account
+
+        let fee = await icrc1TokenActor.icrc1_fee();
+        if (amount < fee) {
+          // If balance is zero, do nothing
+          return #Err("Not enough token to cover fees");
+        } else {
+          // Otherwise, create a default subaccount for the transfer
+          // Prepare the transfer arguments
+          let transferArgs : ICRCTransferArg = {
+            from_subaccount = null;
+            to : ICRCAccount = {
+              owner = Principal.fromText(user_principal);
+              subaccount = null;
+            };
+            amount = amount -fee;
+          };
+          // Perform the transfer and handle the result
+          let transfer_result = await icrc1TokenActor.icrc1_transfer(transferArgs);
+          return #Ok(transfer_result);
+        };
+      };
+      case (_) {
+        // Do nothing for Other tokens types
+        return #Err("Wrong toke types");
+      };
+    };
+  };
+
+  // Withdraw from icp swap pools if the swap or the withdraw fails, can only be called by the owner
+  public shared (msg) func whithdrawFromIcpSwapPools(token : Text, amount : Nat, poolId : Text) : async Result {
+    assert (msg.caller == owner);
+
+    let swapPoolCanister : SwapPool = actor (poolId);
+
+    var withdrawFee = await getfeeToken(token, "");
+    // Withdraw the bought tokens from SwapPool
+    let withdrawArgs = {
+      fee = withdrawFee;
+      token = token;
+      amount = amount;
+    };
+    let result = switch (await swapPoolCanister.withdraw(withdrawArgs)) {
+      case (#ok(id)) { #ok(id) };
+      case (#err(e)) {
+        assert (false);
+        #err(e);
+      };
+    };
+    return result;
+  };
+
+  // Refund mechanism for failed swaps on ICP swap, func can only be called by the owner
+  public shared (msg) func swapFailedSwapsBackToFromToken(sellToken : Text, buyToken : Text, amount : Nat) : async Nat {
+    assert (msg.caller == owner);
+
+    let token0 = { address = sellToken; standard = "" };
+    let token1 = { address = buyToken; standard = "" };
+
+    let poolArgs = { fee = 3000; token0; token1 };
+    switch (await swapFactoryCanister.getPool(poolArgs)) {
+      case (#ok(poolData)) {
+        let swapPoolCanister : SwapPool = actor (Principal.toText(poolData.canisterId));
+
+        var fee_sell = 0;
+
+        let zto : Bool = poolData.token0.address == sellToken;
+        // Perform the swap
+        let swapArgs : SwapArgs = {
+          amountIn = Nat.toText(amount -2 * fee_sell);
+          zeroForOne = zto; // Adjust as necessary based on trade direction
+          amountOutMinimum = "0"; // No minimum amount restriction
+        };
+        let amountOut = switch (await swapPoolCanister.swap(swapArgs)) {
+          case (#ok(amountOut)) { amountOut };
+          case (#err(_)) {
+            assert (false);
+            0;
+          };
+        };
+        var fee_buy = await getfeeToken(buyToken, "");
+
+        // Withdraw the bought tokens from SwapPool
+        let withdrawArgs = {
+          fee = fee_buy;
+          token = buyToken;
+          amount = amountOut;
+        };
+        let _ = switch (await swapPoolCanister.withdraw(withdrawArgs)) {
+          case (#ok(id)) { #ok(id) };
+          case (#err(e)) {
+            assert (false);
+            #err(e);
+          };
+        };
+        return amountOut -fee_buy;
+      };
+      case (#err(e)) {
+        assert (false);
+        return 0;
+      };
+    };
+
   };
 
   /**
